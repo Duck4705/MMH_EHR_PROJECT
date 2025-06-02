@@ -1,0 +1,5 @@
+.env
+img/img_readme/
+package-lock.json
+package.json
+config/default.json
