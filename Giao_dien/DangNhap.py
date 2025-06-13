@@ -9,61 +9,91 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-import requests 
+import requests
+import json
+from abe_client import abe_client
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
+        self.MainWindow = MainWindow
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(785, 424)
+        MainWindow.resize(900, 500)  
+        
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
+        
+       
         self.lbTenEHR = QtWidgets.QLabel(self.centralwidget)
-        self.lbTenEHR.setGeometry(QtCore.QRect(280, 30, 241, 61))
+        self.lbTenEHR.setGeometry(QtCore.QRect(200, 30, 500, 61))  
         font = QtGui.QFont()
         font.setPointSize(31)
         font.setBold(True)
         font.setWeight(75)
         self.lbTenEHR.setFont(font)
         self.lbTenEHR.setObjectName("lbTenEHR")
+        
+        self.lbTenEHR.setAlignment(QtCore.Qt.AlignCenter)
+        
+        
         self.label_2 = QtWidgets.QLabel(self.centralwidget)
-        self.label_2.setGeometry(QtCore.QRect(290, 180, 91, 17))
+        self.label_2.setGeometry(QtCore.QRect(250, 180, 120, 17))  
         self.label_2.setObjectName("label_2")
+        
         self.label_3 = QtWidgets.QLabel(self.centralwidget)
-        self.label_3.setGeometry(QtCore.QRect(290, 230, 91, 17))
+        self.label_3.setGeometry(QtCore.QRect(250, 230, 120, 17))  
         self.label_3.setObjectName("label_3")
+        
+
         self.tbTaiKhoan = QtWidgets.QLineEdit(self.centralwidget)
-        self.tbTaiKhoan.setGeometry(QtCore.QRect(390, 180, 113, 25))
+        self.tbTaiKhoan.setGeometry(QtCore.QRect(380, 180, 200, 30))  
         self.tbTaiKhoan.setObjectName("tbTaiKhoan")
+        
         self.tbMatKhau = QtWidgets.QLineEdit(self.centralwidget)
-        self.tbMatKhau.setGeometry(QtCore.QRect(390, 230, 113, 25))
+        self.tbMatKhau.setGeometry(QtCore.QRect(380, 230, 200, 30))  
         self.tbMatKhau.setObjectName("tbMatKhau")
-        self.tbMatKhau.setEchoMode(QtWidgets.QLineEdit.Password)  # Thiết lập chế độ ẩn mật khẩu
+        self.tbMatKhau.setEchoMode(QtWidgets.QLineEdit.Password)
+        
+
         self.btDangNhap = QtWidgets.QPushButton(self.centralwidget)
-        self.btDangNhap.setGeometry(QtCore.QRect(530, 230, 101, 25))
+        self.btDangNhap.setGeometry(QtCore.QRect(600, 230, 120, 30))  
         self.btDangNhap.setObjectName("btDangNhap")
+        
+
         self.label = QtWidgets.QLabel(self.centralwidget)
-        self.label.setGeometry(QtCore.QRect(240, 100, 351, 31))
+        self.label.setGeometry(QtCore.QRect(150, 100, 600, 31))  
         font = QtGui.QFont()
         font.setPointSize(15)
         font.setBold(True)
         font.setWeight(75)
         self.label.setFont(font)
         self.label.setObjectName("label")
-        self.btDoiMatKhau = QtWidgets.QPushButton(self.centralwidget)
-        self.btDoiMatKhau.setGeometry(QtCore.QRect(390, 320, 101, 25))
-        self.btDoiMatKhau.setObjectName("btDoiMatKhau")
+        self.label.setAlignment(QtCore.Qt.AlignCenter)
+        
+
         self.lbDoiMatKhau = QtWidgets.QLabel(self.centralwidget)
-        self.lbDoiMatKhau.setGeometry(QtCore.QRect(160, 280, 201, 17))
+        self.lbDoiMatKhau.setGeometry(QtCore.QRect(120, 320, 250, 17))  
         self.lbDoiMatKhau.setObjectName("lbDoiMatKhau")
+        
         self.tbEmail = QtWidgets.QLineEdit(self.centralwidget)
-        self.tbEmail.setGeometry(QtCore.QRect(390, 280, 151, 25))
+        self.tbEmail.setGeometry(QtCore.QRect(380, 320, 200, 30))  
         self.tbEmail.setObjectName("tbEmail")
+        
+        self.btDoiMatKhau = QtWidgets.QPushButton(self.centralwidget)
+        self.btDoiMatKhau.setGeometry(QtCore.QRect(600, 320, 120, 30))  
+        self.btDoiMatKhau.setObjectName("btDoiMatKhau")
+        
         self.tbStatus = QtWidgets.QTextBrowser(self.centralwidget)
-        self.tbStatus.setGeometry(QtCore.QRect(180, 310, 171, 61))
+        self.tbStatus.setGeometry(QtCore.QRect(120, 360, 300, 80)) 
         self.tbStatus.setObjectName("tbStatus")
+        
+        self.lbThongBao = QtWidgets.QLabel(self.centralwidget)
+        self.lbThongBao.setGeometry(QtCore.QRect(200, 280, 400, 20)) 
+        self.lbThongBao.setObjectName("lbThongBao")
+        self.lbThongBao.setStyleSheet("color: red; font-weight: bold;")
+        
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 785, 22))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 900, 22))
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -72,20 +102,25 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        
         # Định nghĩa các hàm sự kiện dưới đây 
         self.btDoiMatKhau.clicked.connect(self.SendEmail)
-        self.btDangNhap.clicked.connect(self.Login)  
+        self.btDangNhap.clicked.connect(self.Login)
+        
+        # Allow Enter key to trigger login
+        self.tbMatKhau.returnPressed.connect(self.Login)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "DangNhap"))
-        self.lbTenEHR.setText(_translate("MainWindow", "EHR System"))
-        self.label_2.setText(_translate("MainWindow", "Tài khoản"))
-        self.label_3.setText(_translate("MainWindow", "Mật khẩu"))
+        self.lbTenEHR.setText(_translate("MainWindow", "EHR System "))
+        self.label_2.setText(_translate("MainWindow", "Tai khoan"))
+        self.label_3.setText(_translate("MainWindow", "Mat khau"))
         self.btDangNhap.setText(_translate("MainWindow", "Đăng nhập"))
-        self.label.setText(_translate("MainWindow", "Hệ thống quản lý hồ sơ y tế điện tử"))
+        self.label.setText(_translate("MainWindow", "Hệ thống quản lý hồ sơ y tế điện tử "))
         self.btDoiMatKhau.setText(_translate("MainWindow", "Đổi password"))
-        self.lbDoiMatKhau.setText(_translate("MainWindow", "Nhập email để đổi mật khẩu"))
+        self.lbDoiMatKhau.setText(_translate("MainWindow", "Nhập email để đổi mật khẩu "))
+        self.lbThongBao.setText(_translate("MainWindow", ""))  # Initially empty
 
     # Định nghĩa các hàm thêm dưới đây 
     def SendEmail(self):
@@ -98,11 +133,12 @@ class Ui_MainWindow(object):
             return
         
         # Gọi API gửi yêu cầu đặt lại mật khẩu
-        base_url = "http://localhost:5000/api"
+        base_url = "http://localhost:5000/api" 
         try:
             response = requests.post(
                 f"{base_url}/users/forgot-password", 
-                json={"email": email}
+                json={"email": email},
+                timeout=5
             )
             
             # Hiển thị kết quả lên tbStatus
@@ -118,89 +154,189 @@ class Ui_MainWindow(object):
             self.tbStatus.setText(f"Lỗi kết nối: {str(e)}")
             
     def Login(self):
-        # Lấy username và password từ trường nhập liệu
-        username = self.tbTaiKhoan.text().strip()
-        password = self.tbMatKhau.text().strip()
-        
-        # Kiểm tra xem đã nhập username và password chưa
-        if not username or not password:
-            self.tbStatus.setText("Vui lòng nhập đầy đủ tài khoản và mật khẩu!")
-            return
-        
-        # Gọi API đăng nhập
-        base_url = "http://localhost:5000/api"
+        """Đăng nhập và đăng ký với AA server"""
         try:
-            response = requests.post(
-                f"{base_url}/users/login", 
-                json={
-                    "username": username,
-                    "password": password
-                }
-            )
+            # FIX: Use correct UI element names
+            username = self.tbTaiKhoan.text().strip()
+            password = self.tbMatKhau.text().strip()
             
-            # Xử lý phản hồi từ API
+            if not username or not password:
+                self.tbStatus.setText("Vui lòng nhập đầy đủ thông tin!")
+                return
+            
+            # Show loading message
+            self.tbStatus.setText("Đang đăng nhập...")
+            
+            login_data = {
+                "username": username,
+                "password": password
+            }
+            
+            # CORRECTED: Based on your userRoutes.js file, try these endpoints
+            endpoints = [
+                "http://localhost:5000/api/users/login",    # This is the correct one!
+                "http://localhost:5000/users/login",        
+                "http://localhost:5000/login"               
+            ]
+            
+            response = None
+            last_error = None
+            
+            for endpoint in endpoints:
+                try:
+                    self.tbStatus.setText(f"Thử kết nối: {endpoint}")
+                    print(f"Trying endpoint: {endpoint}")
+                    print(f"Sending data: {login_data}")
+                    
+                    response = requests.post(endpoint, json=login_data, timeout=10)
+                    print(f"Response status: {response.status_code}")
+                    print(f"Response headers: {dict(response.headers)}")
+                    print(f"Response text: {response.text}")
+                    
+                    if response.status_code == 200:
+                        self.tbStatus.setText(f"✅ Kết nối thành công đến: {endpoint}")
+                        break
+                    elif response.status_code == 404:
+                        self.tbStatus.setText(f"❌ Endpoint không tồn tại: {endpoint}")
+                        continue
+                    elif response.status_code == 401:
+                        self.tbStatus.setText(f"❌ Sai tài khoản hoặc mật khẩu: {endpoint}")
+                        last_error = "Sai tài khoản hoặc mật khẩu"
+                        continue
+                    else:
+                        error_text = response.text[:200] + "..." if len(response.text) > 200 else response.text
+                        self.tbStatus.setText(f"❌ Lỗi {response.status_code} từ {endpoint}: {error_text}")
+                        last_error = f"HTTP {response.status_code}: {error_text}"
+                        
+                except requests.exceptions.ConnectionError as e:
+                    error_msg = f"Không thể kết nối đến {endpoint}"
+                    self.tbStatus.setText(error_msg)
+                    print(f"Connection error: {str(e)}")
+                    last_error = error_msg
+                    continue
+                except Exception as e:
+                    error_msg = f"Lỗi khi gọi {endpoint}: {str(e)}"
+                    self.tbStatus.setText(error_msg)
+                    print(error_msg)
+                    last_error = error_msg
+                    continue
+            
+            if not response or response.status_code != 200:
+                self.tbStatus.setText(f"❌ Tất cả endpoint đều thất bại. Lỗi cuối: {last_error}")
+                return
+            
+            # Process successful response
             if response.status_code == 200:
-                data = response.json()
-                token = data.get("token")
-                user_info = data.get("user")
-                
-                # Chuyển sang trang Home và truyền token
-                self.openHomePage(token, user_info)
-            else:
-                # Hiển thị thông báo lỗi
-                error_message = response.json().get('message', 'Lỗi đăng nhập không xác định')
-                self.tbStatus.setText(f"Lỗi: {error_message}")
+                try:
+                    result = response.json()
+                    print(f"✅ Login response JSON: {result}")
+                    
+                    token = result.get('token')
+                    user_info = result.get('user', {})
+                    
+                    if token and user_info:
+                        self.tbStatus.setText("✅ Đăng nhập thành công! Đang mở giao diện chính...")
+                        
+                        # Set up ABE client with token
+                        abe_client.set_auth_token(token, user_info)
+                        
+                        # Get user ID from various possible fields
+                        user_id = (user_info.get('user_id') or 
+                                  user_info.get('userId') or 
+                                  user_info.get('id') or 
+                                  str(user_info.get('_id', '')))
+                        
+                        role = user_info.get('role', 'USER')
+                        department = user_info.get('department')
+                        
+                        print(f"User ID: {user_id}, Role: {role}, Department: {department}")
+                        
+                        # Register with AA server
+                        try:
+                            success, aa_result = abe_client.register_user_with_aa(user_id, role, department)
+                            if success:
+                                print(f"✅ User {username} registered with AA server successfully")
+                            else:
+                                print(f"⚠️ AA registration warning: {aa_result}")
+                        except Exception as aa_error:
+                            print(f"⚠️ AA registration failed: {aa_error}")
+                            # Continue anyway - ABE registration is optional for login
+                        
+                        # Build user attributes for UI
+                        user_attributes = [f"ROLE:{role.upper()}"]
+                        if department:
+                            user_attributes.append(f"DEPT:{department.upper()}")
+                        
+                        # Standardize user_info structure
+                        standardized_user_info = {
+                            'user_id': user_id,
+                            'username': user_info.get('username'),
+                            'fullName': user_info.get('fullName'),
+                            'role': role,
+                            'department': department,
+                            'attributes': user_attributes
+                        }
+                        
+                        print(f"✅ Opening Home with: {standardized_user_info}")
+                        
+                        # Pass to Home
+                        self.openHomePage(token, standardized_user_info)
+                    else:
+                        missing_items = []
+                        if not token: 
+                            missing_items.append("token")
+                        if not user_info: 
+                            missing_items.append("user_info")
+                        
+                        self.tbStatus.setText(f"❌ Server response thiếu: {', '.join(missing_items)}\nResponse: {result}")
+                        print(f"❌ Missing: {missing_items}, Response: {result}")
+                        
+                except json.JSONDecodeError as e:
+                    self.tbStatus.setText(f"❌ Server response không phải JSON hợp lệ:\n{response.text[:500]}")
+                    print(f"JSON decode error: {str(e)}")
                 
         except Exception as e:
-            # Xử lý các lỗi kết nối
-            self.tbStatus.setText(f"Lỗi kết nối: {str(e)}")
-    
+            self.tbStatus.setText(f"❌ Lỗi không mong đợi: {str(e)}")
+            print(f"Unexpected error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
     def openHomePage(self, token, user_info):
-        """Mở trang Home và truyền token"""
         try:
-            # Import trang Home
+            print(f"Opening Home page with token: {token[:20]}... and user: {user_info}")
+            
             from Home import Ui_mainWindow
             
-            # Lưu lại MainWindow hiện tại để đóng sau khi mở Home
-            login_window = self.centralwidget.window()
             self.home_window = QtWidgets.QMainWindow()
             self.home_ui = Ui_mainWindow()
             self.home_ui.setupUi(self.home_window)
             
-            # Lưu token vào biến instance mới của Ui_mainWindow
-            self.home_ui.token = token
-            self.home_ui.user_info = user_info
+            # Truyền thông tin đăng nhập cho Home
+            self.home_ui.setUserInfo(token, user_info)
             
-            # Lưu tham chiếu đến cửa sổ đăng nhập trong cửa sổ Home
-            # để có thể quay lại sau khi đăng xuất
-            self.home_window.parent_login_window = login_window
-            
-            # Thiết lập hành động cho nút đăng xuất
-            self.setupHomePageActions()
-            
-            # Hiển thị trang Home
+            # Hiển thị Home window
             self.home_window.show()
             
-            # Ẩn cửa sổ đăng nhập hiện tại
-            login_window.hide()  # Ẩn thay vì đóng để tránh mất giao diện khi thoát Home
+            # Ẩn login window
+            self.MainWindow.hide()
             
         except Exception as e:
-            self.tbStatus.setText(f"Lỗi khi mở trang chủ: {str(e)}")
-    
-    def setupHomePageActions(self):
-        """Thiết lập các hành động cho Home page"""
-        if hasattr(self, 'home_ui'):
-            # Thiết lập hành động đăng xuất
-            self.home_ui.btDangXuat.clicked.connect(self.logout)
+            self.tbStatus.setText(f"Lỗi mở trang chính: {str(e)}")
+            print(f"Error opening Home: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def logout(self):
         """Đăng xuất và quay lại màn hình đăng nhập"""
         if hasattr(self, 'home_window'):
             self.home_window.close()
-            main_window = self.centralwidget.window()
-            main_window.show()
-            
-    # Các hàm getPatientsList và getPatientDetail đã được chuyển qua Home.py
+        self.MainWindow.show()
+        
+        # Clear form
+        self.tbTaiKhoan.clear()
+        self.tbMatKhau.clear()
+        self.lbThongBao.setText("")
+
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)

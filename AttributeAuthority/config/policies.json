@@ -1,0 +1,17 @@
+{
+  "default_admin": {
+    "name": "default_admin",
+    "access_policy": "ROLE:ADMIN",
+    "description": "Default ADMIN access policy"
+  },
+  "test_policy": {
+    "name": "test_policy",
+    "access_policy": "ROLE:DOCTOR AND DEPT:CARDIOLOGY",
+    "description": "Test policy for cardiology doctors"
+  },
+  "cardiology_policy": {
+    "name": "cardiology_policy",
+    "access_policy": "ROLE:DOCTOR and DEPT:CARDIOLOGY",
+    "description": "Access policy for cardiology doctors"
+  }
+}

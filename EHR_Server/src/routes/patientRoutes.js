@@ -1,13 +1,17 @@
 const express = require('express');
-const router = express.Router();
 const patientController = require('../controllers/patientController');
-const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { authenticate, authorize } = require('../middleware/authMiddleware'); // Use destructured import
 
-// Tất cả các endpoints liên quan đến bệnh nhân đều yêu cầu xác thực
-router.post('/', authenticate, patientController.createPatient);
-router.get('/', authenticate, patientController.getPatients);
-router.get('/:id', authenticate, patientController.getPatientById);
-router.put('/:id', authenticate, patientController.updatePatient);
-router.delete('/:id', authenticate, patientController.deletePatient);
+const router = express.Router();
+
+// All patient routes require authentication
+router.use(authenticate); // Use authenticate, not authMiddleware
+
+// Patient CRUD operations
+router.post('/', patientController.createPatient);        // Create patient with ABE
+router.get('/', patientController.getPatients);           // Get all patients (filtered by role)
+router.get('/:id', patientController.getPatientById);     // Get specific patient (with ABE decryption)
+router.put('/:id', patientController.updatePatient);      // Update patient
+router.delete('/:id', patientController.deletePatient);   // Delete patient
 
 module.exports = router;

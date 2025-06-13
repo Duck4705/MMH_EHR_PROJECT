@@ -10,13 +10,10 @@ router.get('/reset-password/check-token', userController.checkResetToken);
 router.post('/reset-password', userController.resetPassword);
 
 // Routes riêng tư - cần xác thực
-// Đăng xuất
 router.post('/logout', authenticate, userController.logout);
-// Lấy thông tin người dùng hiện tại
 router.get('/me', authenticate, userController.getCurrentUser);
 
 // Routes chỉ dành cho admin
-// Quản lý người dùng - chỉ admin mới có quyền
 router.get('/', authenticate, authorize(['admin']), userController.getAllUsers);
 router.post('/', authenticate, authorize(['admin']), userController.createUser);
 router.get('/:id', authenticate, authorize(['admin']), userController.getUserById);

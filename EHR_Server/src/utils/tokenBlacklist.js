@@ -42,8 +42,24 @@ const cleanupBlacklist = () => {
     }
 };
 
+/**
+ * Xóa toàn bộ blacklist
+ */
+const clearBlacklist = () => {
+    tokenBlacklist.clear();
+};
+
+/**
+ * Lấy kích thước hiện tại của blacklist
+ */
+const getBlacklistSize = () => {
+    return tokenBlacklist.size;
+};
+
 module.exports = {
     addToBlacklist,
     isBlacklisted,
-    cleanupBlacklist
+    cleanupBlacklist,
+    clearBlacklist,
+    getBlacklistSize
 };

@@ -1,7 +1,7 @@
 const User = require('../models/userModel');
-const { sha3_256 } = require('js-sha3');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { sha3_256 } = require('js-sha3');
 const { sendPasswordResetEmail } = require('../utils/emailService');
 const { addToBlacklist, isBlacklisted } = require('../utils/tokenBlacklist');
 
@@ -40,20 +40,28 @@ exports.login = async (req, res) => {
             { 
                 id: user._id,
                 username: user.username,
-                role: user.role
+                role: user.role,
+                department: user.department
             },
             process.env.JWT_SECRET,
             { expiresIn: '3h' }
         );
+
+        // Cập nhật thời gian đăng nhập cuối cùng
+        user.lastLogin = new Date();
+        await user.save();
 
         res.status(200).json({
             message: 'Đăng nhập thành công',
             token,
             user: {
                 id: user._id,
+                user_id: user._id.toString(),
                 username: user.username,
                 fullName: user.fullName,
-                role: user.role
+                role: user.role,
+                department: user.department,
+                email: user.email
             }
         });
     } catch (error) {
@@ -236,8 +244,12 @@ exports.getCurrentUser = async (req, res) => {
 // Lấy danh sách tất cả người dùng - chỉ admin
 exports.getAllUsers = async (req, res) => {
     try {
-        const users = await User.find().select('-password');
-        res.status(200).json(users);
+        const users = await User.find({}).select('-password');
+        res.status(200).json({
+            message: 'Lấy danh sách người dùng thành công',
+            users: users,
+            total: users.length
+        });
     } catch (error) {
         console.error('Lỗi khi lấy danh sách người dùng:', error);
         res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy danh sách người dùng' });
@@ -351,15 +363,23 @@ exports.updateUser = async (req, res) => {
 // Xóa người dùng - chỉ admin
 exports.deleteUser = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
-        if (!user) {
+        const userId = req.params.id;
+        
+        // Don't allow admin to delete themselves
+        if (userId === req.user.id) {
+            return res.status(400).json({ message: 'Không thể xóa chính tài khoản của bạn' });
+        }
+        
+        const deletedUser = await User.findByIdAndDelete(userId);
+        
+        if (!deletedUser) {
             return res.status(404).json({ message: 'Không tìm thấy người dùng' });
         }
-
-        await User.deleteOne({ _id: req.params.id });
-        res.status(200).json({ message: 'Xóa người dùng thành công' });
+        
+        res.json({ message: 'Xóa người dùng thành công' });
+        
     } catch (error) {
-        console.error('Lỗi khi xóa người dùng:', error);
+        console.error('Lỗi xóa user:', error);
         res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa người dùng' });
     }
 };

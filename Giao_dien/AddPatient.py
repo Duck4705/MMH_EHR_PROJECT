@@ -18,19 +18,50 @@ import secrets
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from abe_client import abe_client
 
 class Ui_MainWindow(object):
     def __init__(self):
         self.token = None
+        self.user_info = None
         self.parent_window = None
+        # Set up ABE client with your EHR server URL - FIXED PORT
+        abe_client.ehr_server_url = "http://localhost:5000"
     
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(947, 740)
+        MainWindow.resize(947, 780)  # Increased height to accommodate new policy field
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
+        
+        # Top buttons (moved them slightly to make room for policy field)
+        self.btQuayLai = QtWidgets.QPushButton(self.centralwidget)
+        self.btQuayLai.setGeometry(QtCore.QRect(20, 10, 89, 25))
+        self.btQuayLai.setObjectName("btQuayLai")
+        
+        self.btThemBenhNhan = QtWidgets.QPushButton(self.centralwidget)
+        self.btThemBenhNhan.setGeometry(QtCore.QRect(770, 10, 151, 25))
+        self.btThemBenhNhan.setObjectName("btThemBenhNhan")
+        
+        # NEW: Access Policy Section (in the middle between buttons)
+        self.lblAccessPolicy = QtWidgets.QLabel(self.centralwidget)
+        self.lblAccessPolicy.setGeometry(QtCore.QRect(150, 15, 120, 17))
+        self.lblAccessPolicy.setObjectName("lblAccessPolicy")
+        self.lblAccessPolicy.setText("Chính sách truy cập:")
+        
+        self.leAccessPolicy = QtWidgets.QLineEdit(self.centralwidget)
+        self.leAccessPolicy.setGeometry(QtCore.QRect(280, 12, 350, 25))
+        self.leAccessPolicy.setObjectName("leAccessPolicy")
+        self.leAccessPolicy.setPlaceholderText("Ví dụ: ROLE:DOCTOR and DEPT:CARDIOLOGY")
+        
+        self.btnPolicyExamples = QtWidgets.QPushButton(self.centralwidget)
+        self.btnPolicyExamples.setGeometry(QtCore.QRect(640, 12, 120, 25))
+        self.btnPolicyExamples.setObjectName("btnPolicyExamples")
+        self.btnPolicyExamples.setText("Ví dụ chính sách")
+        
+        # Main content groups (moved down by 40px to make room for policy section)
         self.groupBox = QtWidgets.QGroupBox(self.centralwidget)
-        self.groupBox.setGeometry(QtCore.QRect(20, 50, 291, 491))
+        self.groupBox.setGeometry(QtCore.QRect(20, 90, 291, 491))  # Moved from y=50 to y=90
         self.groupBox.setObjectName("groupBox")
         self.label = QtWidgets.QLabel(self.groupBox)
         self.label.setGeometry(QtCore.QRect(40, 60, 67, 17))
@@ -68,8 +99,9 @@ class Ui_MainWindow(object):
         self.tbTienSuBenh = QtWidgets.QTextEdit(self.groupBox)
         self.tbTienSuBenh.setGeometry(QtCore.QRect(20, 390, 231, 70))
         self.tbTienSuBenh.setObjectName("tbTienSuBenh")
+        
         self.groupBox_2 = QtWidgets.QGroupBox(self.centralwidget)
-        self.groupBox_2.setGeometry(QtCore.QRect(329, 49, 271, 491))
+        self.groupBox_2.setGeometry(QtCore.QRect(329, 89, 271, 491))  # Moved from y=49 to y=89
         self.groupBox_2.setObjectName("groupBox_2")
         self.tbTuoi = QtWidgets.QLineEdit(self.groupBox_2)
         self.tbTuoi.setGeometry(QtCore.QRect(110, 30, 113, 25))
@@ -113,8 +145,9 @@ class Ui_MainWindow(object):
         self.label_19 = QtWidgets.QLabel(self.groupBox_2)
         self.label_19.setGeometry(QtCore.QRect(230, 90, 31, 17))
         self.label_19.setObjectName("label_19")
+        
         self.groupBox_3 = QtWidgets.QGroupBox(self.centralwidget)
-        self.groupBox_3.setGeometry(QtCore.QRect(639, 49, 281, 491))
+        self.groupBox_3.setGeometry(QtCore.QRect(639, 89, 281, 491))  # Moved from y=49 to y=89
         self.groupBox_3.setObjectName("groupBox_3")
         self.label_15 = QtWidgets.QLabel(self.groupBox_3)
         self.label_15.setGeometry(QtCore.QRect(20, 30, 67, 17))
@@ -128,15 +161,19 @@ class Ui_MainWindow(object):
         self.label_17 = QtWidgets.QLabel(self.groupBox_3)
         self.label_17.setGeometry(QtCore.QRect(20, 260, 101, 17))
         self.label_17.setObjectName("label_17")
-        self.btQuayLai = QtWidgets.QPushButton(self.centralwidget)
-        self.btQuayLai.setGeometry(QtCore.QRect(20, 10, 89, 25))
-        self.btQuayLai.setObjectName("btQuayLai")
-        self.btThemBenhNhan = QtWidgets.QPushButton(self.centralwidget)
-        self.btThemBenhNhan.setGeometry(QtCore.QRect(770, 10, 151, 25))
-        self.btThemBenhNhan.setObjectName("btThemBenhNhan")
+        
+        # Status text browser (moved down)
         self.tbStatus = QtWidgets.QTextBrowser(self.centralwidget)
-        self.tbStatus.setGeometry(QtCore.QRect(20, 560, 901, 91))
+        self.tbStatus.setGeometry(QtCore.QRect(20, 600, 901, 91))  # Moved from y=560 to y=600
         self.tbStatus.setObjectName("tbStatus")
+        
+        # Add separator line between policy section and main content
+        self.line = QtWidgets.QFrame(self.centralwidget)
+        self.line.setGeometry(QtCore.QRect(20, 45, 901, 20))
+        self.line.setFrameShape(QtWidgets.QFrame.HLine)
+        self.line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.line.setObjectName("line")
+        
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 947, 22))
@@ -152,6 +189,7 @@ class Ui_MainWindow(object):
         # Kết nối các nút với hàm xử lý sự kiện
         self.btThemBenhNhan.clicked.connect(self.themBenhNhan)
         self.btQuayLai.clicked.connect(self.quayLai)
+        self.btnPolicyExamples.clicked.connect(self.showPolicyExamples)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -178,60 +216,184 @@ class Ui_MainWindow(object):
         self.btQuayLai.setText(_translate("MainWindow", "Quay Lại"))
         self.btThemBenhNhan.setText(_translate("MainWindow", "Thêm bệnh nhân"))
 
+    def setUserInfo(self, token, user_info):
+        """Store user info from login"""
+        try:
+            self.token = token
+            self.user_info = user_info
+            
+            # Set token for ABE client
+            abe_client.set_auth_token(token, user_info)
+            
+            # Extract user details safely
+            self.user_id = user_info.get('user_id', '')
+            self.user_role = user_info.get('role', 'USER')
+            self.user_department = user_info.get('department')
+            self.user_attributes = user_info.get('attributes', [])
+            
+            print(f"AddPatient received token: {token[:20] if token else 'None'}...")
+            print(f"AddPatient received user_info: {user_info}")
+            
+            # Update UI based on user role
+            self.updateUIForRole()
+            
+        except Exception as e:
+            print(f"Error in AddPatient setUserInfo: {str(e)}")
 
-    def setToken(self, token):
-        """Lưu token để sử dụng trong API call"""
-        self.token = token
-    
-    def setParentWindow(self, window):
-        """Lưu cửa sổ cha để quay lại sau khi hoàn thành"""
-        self.parent_window = window
-    
+    def setParentWindow(self, parent_window):
+        """Store reference to parent window"""
+        self.parent_window = parent_window
+
+    def updateUIForRole(self):
+        """Update UI elements based on user role"""
+        try:
+            # Update UI elements based on user role
+            if hasattr(self, 'user_role'):
+                # Set default policy based on user role
+                if self.user_info:
+                    user_role = self.user_info.get('role', 'ADMIN').upper()
+                    user_dept = self.user_info.get('department')
+                    
+                    if user_role == 'ADMIN':
+                        # Admin has full access, no department restriction needed
+                        self.leAccessPolicy.setText("ROLE:ADMIN")
+                    elif user_role == 'DOCTOR':
+                        if user_dept and user_dept.upper() != 'NONE':
+                            self.leAccessPolicy.setText(f"ROLE:DOCTOR and DEPT:{user_dept.upper()}")
+                        else:
+                            self.leAccessPolicy.setText("ROLE:DOCTOR and DEPT:GENERAL")
+                    elif user_role == 'NURSE':
+                        if user_dept and user_dept.upper() != 'NONE':
+                            self.leAccessPolicy.setText(f"ROLE:NURSE and DEPT:{user_dept.upper()}")
+                        else:
+                            self.leAccessPolicy.setText("ROLE:NURSE and DEPT:GENERAL")
+                    else:
+                        # Other roles
+                        if user_dept and user_dept.upper() != 'NONE':
+                            self.leAccessPolicy.setText(f"ROLE:{user_role} and DEPT:{user_dept.upper()}")
+                        else:
+                            self.leAccessPolicy.setText(f"ROLE:{user_role}")
+            
+        except Exception as e:
+            print(f"Error updating UI for role: {str(e)}")
+
     def ma_hoa_aes(self, du_lieu, khoa):
         """
-        Mã hóa dữ liệu bằng AES-256 với khóa đã cho
+        Mã hóa dữ liệu bằng AES-256-GCM (bảo mật cao)
         
         Args:
             du_lieu: Dữ liệu cần mã hóa (chuỗi, số, v.v.)
-            khoa: Khóa AES dạng bytes
+            khoa: Khóa AES dạng bytes hoặc hex string
             
         Returns:
-            str: Dữ liệu đã mã hóa dạng base64
+            str: Dữ liệu đã mã hóa dạng base64 (GCM format)
         """
-        # Chuyển đổi dữ liệu đầu vào thành chuỗi nếu là số
-        if isinstance(du_lieu, (int, float)):
-            du_lieu = str(du_lieu)
+        try:
+            # Convert data to string if not already
+            if not isinstance(du_lieu, str):
+                du_lieu = str(du_lieu)
             
-        # Tạo IV ngẫu nhiên 16 byte
-        iv = secrets.token_bytes(16)
-        
-        # Mã hóa dữ liệu
-        cipher = AES.new(khoa, AES.MODE_CBC, iv)
-        du_lieu_bytes = du_lieu.encode('utf-8')
-        du_lieu_da_ma_hoa = cipher.encrypt(pad(du_lieu_bytes, AES.block_size))
-        
-        # Kết hợp IV và dữ liệu đã mã hóa
-        du_lieu_hoan_chinh = iv + du_lieu_da_ma_hoa
-        
-        # Chuyển đổi sang base64 để dễ truyền
-        du_lieu_base64 = base64.b64encode(du_lieu_hoan_chinh).decode('utf-8')
-        
-        return du_lieu_base64
-    
+            # Ensure 32-byte key for AES-256
+            if isinstance(khoa, str):
+                if len(khoa) == 64:  # hex string
+                    aes_key = bytes.fromhex(khoa)
+                else:
+                    aes_key = hashlib.sha256(khoa.encode('utf-8')).digest()
+            else:
+                aes_key = khoa[:32] if len(khoa) > 32 else khoa.ljust(32, b'\x00')
+            
+            print(f"🔐 Encrypting with AES-256-GCM, key length: {len(aes_key)} bytes")
+            
+            # Generate random nonce (12 bytes for GCM)
+            nonce = secrets.token_bytes(12)
+            
+            # Create cipher and encrypt
+            cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+            encrypted_data, tag = cipher.encrypt_and_digest(du_lieu.encode('utf-8'))
+            
+            # Combine nonce + tag + encrypted_data and encode as base64
+            combined = nonce + tag + encrypted_data
+            result = base64.b64encode(combined).decode('utf-8')
+            
+            print(f"✅ Successfully encrypted data with GCM (length: {len(result)})")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Lỗi mã hóa AES-GCM: {str(e)}")
+            raise Exception(f"Lỗi mã hóa: {str(e)}")
+
     def quayLai(self):
         """Quay lại trang Home"""
-        if self.parent_window:
-            MainWindow = self.centralwidget.window()
-            MainWindow.close()
-            self.parent_window.show()
-    
+        try:
+            print("🔙 Returning to Home page...")
+            
+            # Get the current main window
+            current_window = self.centralwidget.window()
+            
+            # Check if we have a parent window reference
+            if hasattr(self, 'parent_window') and self.parent_window:
+                print("✅ Found parent window, showing it...")
+                current_window.close()
+                self.parent_window.show()
+            else:
+                # If no parent window, try to create new Home window
+                print("⚠️ No parent window found, creating new Home window...")
+                
+                from Home import Ui_mainWindow as HomeUI
+                
+                self.home_window = QtWidgets.QMainWindow()
+                self.home_ui = HomeUI()
+                self.home_ui.setupUi(self.home_window)
+                
+                # Pass user information to Home
+                if self.token and self.user_info:
+                    self.home_ui.setUserInfo(self.token, self.user_info)
+                
+                # Show Home and close current window
+                self.home_window.show()
+                current_window.close()
+                
+        except Exception as e:
+            print(f"❌ Error in quayLai: {str(e)}")
+            self.tbStatus.setText(f"❌ Lỗi khi quay lại: {str(e)}")
+
+    def get_jwt_secret_from_server(self):
+        """Get JWT secret from server for consistent key derivation"""
+        try:
+            response = requests.get(
+                f"{abe_client.ehr_server_url}/api/abe/get-jwt-secret",
+                headers={
+                    "Authorization": f"Bearer {self.token}",
+                    "Content-Type": "application/json"
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('jwt_secret', 'ehr-secret-key')
+            else:
+                print(f"⚠️ Could not get JWT secret from server, using default")
+                return 'ehr-secret-key'
+        except Exception as e:
+            print(f"⚠️ Error getting JWT secret: {e}, using default")
+            return 'ehr-secret-key'
+
     def themBenhNhan(self):
-        """Thêm bệnh nhân mới"""
+        """Thêm bệnh nhân mới với chính sách truy cập ABE - SIMPLE VERSION"""
         try:
             # Kiểm tra token
             if not self.token:
-                self.tbStatus.setText("Lỗi: Không có token xác thực. Vui lòng đăng nhập lại.")
+                self.tbStatus.setText("❌ Lỗi: Không có token xác thực. Vui lòng đăng nhập lại.")
                 return
+            
+            # Lấy chính sách truy cập
+            access_policy = self.leAccessPolicy.text().strip()
+            if not access_policy:
+                access_policy = "ROLE:ADMIN"  # Default policy
+            
+            # Show progress message
+            self.tbStatus.setText("🔄 Đang xử lý thông tin bệnh nhân...")
             
             # Lấy dữ liệu từ các ô nhập
             id_benh_nhan = self.tbID.text().strip()
@@ -241,19 +403,28 @@ class Ui_MainWindow(object):
             thong_tin_lien_lac = self.tbThongTinLienLac.toPlainText().strip()
             tien_su_benh = self.tbTienSuBenh.toPlainText().strip()
             
-            # Chuyển đổi tuổi, cân nặng, chiều cao sang số nếu có
+            # Validate required fields
+            if not id_benh_nhan:
+                self.tbStatus.setText("❌ Lỗi: Vui lòng nhập ID bệnh nhân")
+                return
+                
+            if not ho_ten:
+                self.tbStatus.setText("❌ Lỗi: Vui lòng nhập họ tên bệnh nhân")
+                return
+            
+            # Validate and convert numeric fields
             tuoi_text = self.tbTuoi.text().strip()
             if tuoi_text:
                 try:
                     tuoi = int(tuoi_text)
                     if tuoi <= 0:
-                        self.tbStatus.setText("Lỗi: Tuổi phải là số nguyên dương")
+                        self.tbStatus.setText("❌ Lỗi: Tuổi phải là số nguyên dương")
                         return
                 except ValueError:
-                    self.tbStatus.setText("Lỗi: Tuổi phải là số nguyên")
+                    self.tbStatus.setText("❌ Lỗi: Tuổi phải là số nguyên")
                     return
             else:
-                self.tbStatus.setText("Vui lòng nhập tuổi")
+                self.tbStatus.setText("❌ Vui lòng nhập tuổi")
                 return
                 
             can_nang_text = self.tbCanNang.text().strip()
@@ -261,13 +432,13 @@ class Ui_MainWindow(object):
                 try:
                     can_nang = float(can_nang_text)
                     if can_nang <= 0:
-                        self.tbStatus.setText("Lỗi: Cân nặng phải là số dương")
+                        self.tbStatus.setText("❌ Lỗi: Cân nặng phải là số dương")
                         return
                 except ValueError:
-                    self.tbStatus.setText("Lỗi: Cân nặng phải là số")
+                    self.tbStatus.setText("❌ Lỗi: Cân nặng phải là số")
                     return
             else:
-                self.tbStatus.setText("Vui lòng nhập cân nặng")
+                self.tbStatus.setText("❌ Vui lòng nhập cân nặng")
                 return
                 
             chieu_cao_text = self.tbChieuCao.text().strip()
@@ -275,13 +446,13 @@ class Ui_MainWindow(object):
                 try:
                     chieu_cao = float(chieu_cao_text)
                     if chieu_cao <= 0:
-                        self.tbStatus.setText("Lỗi: Chiều cao phải là số dương")
+                        self.tbStatus.setText("❌ Lỗi: Chiều cao phải là số dương")
                         return
                 except ValueError:
-                    self.tbStatus.setText("Lỗi: Chiều cao phải là số")
+                    self.tbStatus.setText("❌ Lỗi: Chiều cao phải là số")
                     return
             else:
-                self.tbStatus.setText("Vui lòng nhập chiều cao")
+                self.tbStatus.setText("❌ Vui lòng nhập chiều cao")
                 return
             
             nhom_mau = self.tbNhomMau.text().strip()
@@ -290,79 +461,132 @@ class Ui_MainWindow(object):
             di_ung = self.tbDiUng.toPlainText().strip()
             chi_tiet_benh = self.tbChiTietBenh.toPlainText().strip()
             
-            # Kiểm tra các trường bắt buộc
-            if not id_benh_nhan:
-                self.tbStatus.setText("Lỗi: Vui lòng nhập ID bệnh nhân")
-                return
-                
-            if not ho_ten:
-                self.tbStatus.setText("Lỗi: Vui lòng nhập họ tên bệnh nhân")
-                return
+            # STEP 1: Get basic info
+            user_id = self.user_info.get('user_id') or self.user_info.get('id')
             
-            # Mã hóa dữ liệu bằng AES-256
-            
-            # Tạo random seed để làm đầu vào cho SHA3
-            random_seed = secrets.token_hex(16)
-            
-            # Tạo khóa AES từ SHA3-256
-            sha3 = hashlib.sha3_256(random_seed.encode())
-            khoa_aes = sha3.digest()  # Lấy binary digest làm khóa AES
-            khoa_aes_hex = sha3.hexdigest()  # Lưu hex digest để gửi đi
-            
-            # Mã hóa từng trường dữ liệu với cùng một khóa AES
-            ngay_sinh = self.ma_hoa_aes(ngay_sinh, khoa_aes)
-            dia_chi = self.ma_hoa_aes(dia_chi, khoa_aes)
-            thong_tin_lien_lac = self.ma_hoa_aes(thong_tin_lien_lac, khoa_aes)
-            tien_su_benh = self.ma_hoa_aes(tien_su_benh, khoa_aes)
-            tuoi = self.ma_hoa_aes(tuoi, khoa_aes)
-            can_nang = self.ma_hoa_aes(can_nang, khoa_aes)
-            chieu_cao = self.ma_hoa_aes(chieu_cao, khoa_aes)
-            nhom_mau = self.ma_hoa_aes(nhom_mau, khoa_aes)
-            don_thuoc = self.ma_hoa_aes(don_thuoc, khoa_aes)
-            di_ung = self.ma_hoa_aes(di_ung, khoa_aes)
-            chi_tiet_benh = self.ma_hoa_aes(chi_tiet_benh, khoa_aes)
-            gioi_tinh = self.ma_hoa_aes(gioi_tinh if gioi_tinh else "Không xác định", khoa_aes)
+            # STEP 2: Create SIMPLE encrypted_aes_key identifier (NO complex encoding)
+            # Just use simple underscores for spaces and keep colons as-is
+            simple_policy = access_policy.replace(' ', '_')  # Only replace spaces with underscores
+            encrypted_aes_key_identifier = f"patient_{id_benh_nhan}_policy_{simple_policy}"
 
-            # Tạo đối tượng dữ liệu bệnh nhân
-            patient_data = {
-                "ID_BenhNhan": id_benh_nhan,
-                "HoTen": ho_ten,
-                "NgaySinh": ngay_sinh,
-                "DiaChi": dia_chi,
-                "ThongTinLienLac": thong_tin_lien_lac,
-                "TienSuBenh": tien_su_benh,
-                "Tuoi": tuoi,
-                "CanNang": can_nang,
-                "ChieuCao": chieu_cao,
-                "NhomMau": nhom_mau,
-                "DonThuoc": don_thuoc,
-                "DiUng": di_ung,
-                "ChiTietBenh": chi_tiet_benh,
-                "GioiTinh": gioi_tinh,
-                "KhoaAES": khoa_aes_hex
+            print(f"🔑 Generated simple identifier: {encrypted_aes_key_identifier}")
+            print(f"🔑 Original policy: {access_policy}")
+            
+            # STEP 3: PATIENT-SPECIFIC KEY GENERATION (FIXED)
+            # Use patient ID instead of user ID for consistent keys across users
+            simple_key_input = f"{encrypted_aes_key_identifier}:{id_benh_nhan}:PATIENT_DATA"
+            aes_key_hex = hashlib.sha256(simple_key_input.encode()).hexdigest()
+            
+            print(f"🔑 Patient-specific key generation:")
+            print(f"   - Input: {simple_key_input}")
+            print(f"   - Final key: {aes_key_hex[:16]}...")
+            
+            # Convert hex key to bytes for AES
+            aes_key = bytes.fromhex(aes_key_hex)
+            print(f"🔐 Encrypting with AES-256-GCM, key length: {len(aes_key)} bytes")
+
+            # STEP 4: Encrypt each field with AES-GCM (FIXED - convert all to strings)
+            encrypted_fields = {}
+            
+            fields_to_encrypt = {
+                'NgaySinh': str(ngay_sinh),
+                'GioiTinh': str(gioi_tinh), 
+                'Tuoi': str(tuoi),  # Convert int to string
+                'CanNang': str(can_nang),  # Convert float to string
+                'ChieuCao': str(chieu_cao),  # Convert float to string
+                'NhomMau': str(nhom_mau),
+                'DiaChi': str(dia_chi),
+                'ThongTinLienLac': str(thong_tin_lien_lac),
+                'TienSuBenh': str(tien_su_benh),
+                'DiUng': str(di_ung),
+                'ChiTietBenh': str(chi_tiet_benh),
+                'DonThuoc': str(don_thuoc)
             }
             
-            # Gửi dữ liệu đến API
-            base_url = "http://localhost:5000/api"
-            headers = {"Authorization": f"Bearer {self.token}"}
+            for field_name, field_value in fields_to_encrypt.items():
+                try:
+                    # Ensure field_value is a string
+                    if not isinstance(field_value, str):
+                        field_value = str(field_value)
+                    
+                    # Create cipher for each field with random nonce
+                    nonce = os.urandom(12)  # 96-bit nonce for GCM
+                    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+                    
+                    # Encrypt and get authentication tag
+                    ciphertext, tag = cipher.encrypt_and_digest(field_value.encode('utf-8'))
+                    
+                    # Combine nonce + tag + ciphertext and encode as base64
+                    combined = nonce + tag + ciphertext
+                    encrypted_fields[field_name] = base64.b64encode(combined).decode('utf-8')
+                    
+                    print(f"✅ Successfully encrypted {field_name} with GCM (length: {len(combined)})")
+                    
+                except Exception as e:
+                    print(f"❌ Error encrypting {field_name}: {e}")
+                    self.show_message("Lỗi", f"Không thể mã hóa trường {field_name}: {str(e)}")
+                    return
             
+            print(f"✅ Successfully encrypted all fields with AES-256-GCM")
+            
+            # Rest of the method stays the same...
+            # STEP 5: Create patient data dictionary
+            patient_data = {
+                'ID_BenhNhan': id_benh_nhan,
+                'HoTen': ho_ten,
+                'NgaySinh': encrypted_fields['NgaySinh'],
+                'GioiTinh': encrypted_fields['GioiTinh'],
+                'Tuoi': encrypted_fields['Tuoi'],
+                'CanNang': encrypted_fields['CanNang'],
+                'ChieuCao': encrypted_fields['ChieuCao'],
+                'NhomMau': encrypted_fields['NhomMau'],
+                'DiaChi': encrypted_fields['DiaChi'],
+                'ThongTinLienLac': encrypted_fields['ThongTinLienLac'],
+                'TienSuBenh': encrypted_fields['TienSuBenh'],
+                'DiUng': encrypted_fields['DiUng'],
+                'ChiTietBenh': encrypted_fields['ChiTietBenh'],
+                'DonThuoc': encrypted_fields['DonThuoc'],
+                'encrypted_aes_key': encrypted_aes_key_identifier,
+                'access_policy': access_policy
+            }
+
+            print(f"📤 Sending patient data to server...")
+            print(f"🔑 encrypted_aes_key: {encrypted_aes_key_identifier}")
+
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
+
+            # Send to server
             response = requests.post(
-                f"{base_url}/patients", 
+                "http://localhost:5000/api/patients",
+                json=patient_data,
                 headers=headers,
-                json=patient_data
+                timeout=30
             )
+
+            print(f"📡 Server response: {response.status_code}")
+            print(f"📡 Response text: {response.text}")
             
-            # Xử lý phản hồi
+            # Handle response
             if response.status_code == 201:
-                self.tbStatus.setText(f"Đã thêm bệnh nhân '{ho_ten}' thành công!")
+                self.tbStatus.setText(f"✅ Successfully created patient {ho_ten} (ID: {id_benh_nhan})")
                 self.xoaFormNhapLieu()
             else:
-                error_message = response.json().get('message', 'Lỗi không xác định')
-                self.tbStatus.setText(f"Lỗi: {error_message}")
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get('message', 'Lỗi không xác định')
+                except:
+                    error_message = f"HTTP {response.status_code}: {response.text}"
+                
+                self.tbStatus.setText(f"❌ Lỗi từ server: {error_message}")
         
+        except requests.exceptions.RequestException as e:
+            self.tbStatus.setText(f"❌ Lỗi kết nối: {str(e)}")
         except Exception as e:
-            self.tbStatus.setText(f"Lỗi: {str(e)}")
-    
+            self.tbStatus.setText(f"❌ Lỗi: {str(e)}")
+
     def xoaFormNhapLieu(self):
         """Xóa dữ liệu đã nhập trong form"""
         self.tbID.clear()
@@ -379,12 +603,88 @@ class Ui_MainWindow(object):
         self.TbDonThuoc.clear()
         self.tbDiUng.clear()
         self.tbChiTietBenh.clear()
+        
+        # Reset policy based on user role - ADMIN EXCEPTION
+        if self.user_info:
+            user_role = self.user_info.get('role', 'ADMIN').upper()
+            user_dept = self.user_info.get('department')
+            
+            if user_role == 'ADMIN':
+                # Admin has full access, no department restriction needed
+                self.leAccessPolicy.setText("ROLE:ADMIN")
+            elif user_role == 'DOCTOR':
+                if user_dept and user_dept.upper() != 'NONE':
+                    self.leAccessPolicy.setText(f"ROLE:DOCTOR and DEPT:{user_dept.upper()}")
+                else:
+                    self.leAccessPolicy.setText("ROLE:DOCTOR and DEPT:GENERAL")
+            elif user_role == 'NURSE':
+                if user_dept and user_dept.upper() != 'NONE':
+                    self.leAccessPolicy.setText(f"ROLE:NURSE and DEPT:{user_dept.upper()}")
+                else:
+                    self.leAccessPolicy.setText("ROLE:NURSE and DEPT:GENERAL")
+            else:
+                # Other roles
+                if user_dept and user_dept.upper() != 'NONE':
+                    self.leAccessPolicy.setText(f"ROLE:{user_role} and DEPT:{user_dept.upper()}")
+                else:
+                    self.leAccessPolicy.setText(f"ROLE:{user_role}")
 
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    sys.exit(app.exec_())
+    def showPolicyExamples(self):
+        """Show simple policy examples"""
+        examples = """🔐 CHÍNH SÁCH TRUY CẬP - VÍ DỤ ĐƠN GIẢN:
+
+👑 Chỉ ADMIN:
+ADMIN
+
+👨‍⚕️ Chỉ bác sĩ tim mạch:
+DOCTOR and CARDIOLOGY
+
+🩺 Bác sĩ hoặc ADMIN:
+ADMIN or DOCTOR
+
+👩‍⚕️ Y tá tim mạch:
+NURSE and CARDIOLOGY
+
+🌟 Admin hoặc bác sĩ tim mạch:
+ADMIN or (DOCTOR and CARDIOLOGY)
+
+🏥 Tất cả nhân viên y tế:
+ADMIN or DOCTOR or NURSE"""
+
+        # Show in a message box
+        from PyQt5.QtWidgets import QMessageBox
+        msg = QMessageBox()
+        msg.setWindowTitle("Ví dụ chính sách đơn giản")
+        msg.setText(examples)
+        msg.setDetailedText("""🔑 CÚ PHÁP ĐƠN GIẢN:
+• ADMIN: Quản trị viên (quyền cao nhất)
+• DOCTOR: Bác sĩ
+• NURSE: Y tá
+• CARDIOLOGY: Khoa tim mạch
+• GENERAL: Khoa tổng hợp
+
+📝 LOGIC:
+• "and": Cả hai điều kiện phải đúng
+• "or": Chỉ cần một điều kiện đúng
+• "()": Nhóm điều kiện
+
+💡 KHUYẾN NGHỊ:
+• Dùng "ADMIN" cho quyền cao nhất
+• Dùng "DOCTOR and CARDIOLOGY" cho bác sĩ chuyên khoa
+• Dùng "ADMIN or DOCTOR" để cho phép cả admin và bác sĩ""")
+        msg.exec_()
+
+def show_message(self, title, message):
+    """Show message dialog"""
+    try:
+        from PyQt5.QtWidgets import QMessageBox
+        msg = QMessageBox()
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.exec_()
+    except Exception as e:
+        print(f"Error showing message: {e}")
+        # Fallback to status text
+        self.tbStatus.setText(f"{title}: {message}")
+
+# Remove the standalone main execution - AddPatient should only be called from Home

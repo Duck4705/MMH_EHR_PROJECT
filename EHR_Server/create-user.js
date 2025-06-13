@@ -1,50 +1,26 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { sha3_256 } = require('js-sha3');
+const User = require('./src/models/userModel');
+const readline = require('readline');
 
-// Tạo hàm kết nối đến database với cơ chế chờ
-const connectWithRetry = async (maxRetries = 5, retryInterval = 5000) => {
-    let connected = false;
-    let retries = 0;
-    
-    while (!connected && retries < maxRetries) {
-        try {
-            console.log(`Đang kết nối tới MongoDB (lần thử ${retries + 1}/${maxRetries})...`);
-            await mongoose.connect(process.env.MONGO_URI, {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
-                useCreateIndex: true,
-                useFindAndModify: false,
-                writeConcern: {
-                    w: 'majority',
-                    j: true
-                }
-            });
-            connected = true;
-            console.log('Kết nối MongoDB thành công!');
-        } catch (error) {
-            retries++;
-            console.error(`Kết nối thất bại: ${error.message}`);
-            if (retries < maxRetries) {
-                console.log(`Thử lại sau ${retryInterval/1000} giây...`);
-                await new Promise(resolve => setTimeout(resolve, retryInterval));
+// MongoDB connection with retry logic
+const connectWithRetry = async () => {
+    try {
+        const options = {
+            writeConcern: {
+                w: 'majority',
+                j: true
             }
-        }
-    }
-    
-    if (!connected) {
-        console.error(`Không thể kết nối đến MongoDB sau ${maxRetries} lần thử. Hãy kiểm tra lại chuỗi kết nối.`);
+        };
+        
+        await mongoose.connect(process.env.MONGO_URI, options);
+        console.log('MongoDB connected successfully');
+    } catch (error) {
+        console.error('MongoDB connection failed:', error.message);
         process.exit(1);
     }
-    
-    return connected;
 };
-
-// Import User model
-const User = require('./src/models/userModel');
-
-// Import readline module
-const readline = require('readline');
 
 // Tạo interface cho việc đọc input
 const rl = readline.createInterface({
@@ -61,68 +37,131 @@ const promptInput = (question) => {
     });
 };
 
-// Tạo tài khoản admin
-const createAdmin = async () => {
-    const username = await promptInput("Nhập username: ");
-    const password = await promptInput("Nhập password: ");
-    const fullname = await promptInput("Nhập fullname: ");
-    const email = username + "@gmail.com";
-    const role = await promptInput("Nhập role: ");
+// Show role and department options
+const showOptions = () => {
+    console.log('\n=== TẠO TÀI KHOẢN HỆ THỐNG EHR ===');
+    console.log('📋 Các ROLE có sẵn:');
+    console.log('   - ADMIN (Quản trị viên - có quyền truy cập tất cả)');
+    console.log('   - DOCTOR (Bác sĩ)');
+    console.log('   - NURSE (Y tá)');
+    console.log('\n🏥 Các DEPARTMENT có sẵn:');
+    console.log('   - GENERAL (Khoa tổng hợp)');
+    console.log('   - CARDIOLOGY (Khoa tim mạch)');
+    console.log('   - EMERGENCY (Khoa cấp cứu)');
+    console.log('   - PEDIATRICS (Khoa nhi)');
+    console.log('   - SURGERY (Khoa phẫu thuật)');
+    console.log('\n💡 Lưu ý: ADMIN có thể thuộc bất kỳ department nào và vẫn có full access\n');
+};
+
+// Validate role
+const validateRole = (role) => {
+    const validRoles = ['ADMIN', 'DOCTOR', 'NURSE'];
+    const upperRole = role.toUpperCase();
+    if (validRoles.includes(upperRole)) {
+        return upperRole;
+    }
+    return null;
+};
+
+// Validate department
+const validateDepartment = (department) => {
+    const validDepartments = ['GENERAL', 'CARDIOLOGY', 'EMERGENCY', 'PEDIATRICS', 'SURGERY'];
+    const upperDept = department.toUpperCase();
+    if (validDepartments.includes(upperDept)) {
+        return upperDept;
+    }
+    return null;
+};
+
+// Tạo tài khoản user
+const createUser = async () => {
     try {
-        // Kiểm tra xem đã có tài khoản admin chưa
-        const adminExists = await User.findOne({ username: username });
+        // Connect to MongoDB first
+        await connectWithRetry();
         
-        if (adminExists) {
-            console.log('Tài khoản đã tồn tại.');
-            return;
+        // Show available options
+        showOptions();
+
+        const username = await promptInput("👤 Nhập username: ");
+        const password = await promptInput("🔐 Nhập password: ");
+        const fullname = await promptInput("📝 Nhập fullname: ");
+        const email = username + "@gmail.com";
+        
+        // Get and validate role
+        let role;
+        while (!role) {
+            const roleInput = await promptInput("🎯 Nhập role (ADMIN/DOCTOR/NURSE): ");
+            role = validateRole(roleInput);
+            if (!role) {
+                console.log("❌ Role không hợp lệ! Vui lòng nhập: ADMIN, DOCTOR, hoặc NURSE");
+            }
         }
         
-        // Tạo mật khẩu mặc định và băm
-        const defaultPassword = password;
-        const hashedPassword = sha3_256(defaultPassword);
-        
-        // Tạo tài khoản admin
-        const admin = new User({
-            username: username,
-            password: hashedPassword,
+        // Get and validate department
+        let department;
+        while (!department) {
+            const deptInput = await promptInput("🏥 Nhập department (GENERAL/CARDIOLOGY/EMERGENCY/PEDIATRICS/SURGERY): ");
+            department = validateDepartment(deptInput);
+            if (!department) {
+                console.log("❌ Department không hợp lệ! Vui lòng nhập một trong các tùy chọn được liệt kê");
+            }
+        }
+
+        // Check existing user
+        const userExists = await User.findOne({ username: username });
+        if (userExists) {
+            console.log('❌ Tài khoản đã tồn tại.');
+            return;
+        }
+
+        // Create and save new user
+        const newUser = new User({
+            username,
+            password: sha3_256(password),
             fullName: fullname,
-            role: role,
-            email: email,
+            role,
+            department,  // ADDED: Department field
+            email,
             isActive: true,
             createdBy: 'system'
         });
+
+        await newUser.save();
         
-        await admin.save();
-        console.log('Đã tạo tài khoản admin thành công!');
-        console.log('Tên đăng nhập: ' + username);
-        console.log('Mật khẩu: ' + password);
-        console.log('Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu!');
+        console.log('\n✅ Đã tạo tài khoản thành công!');
+        console.log('📋 Thông tin tài khoản:');
+        console.log(`   👤 Username: ${username}`);
+        console.log(`   🔐 Password: ${password}`);
+        console.log(`   📝 Full Name: ${fullname}`);
+        console.log(`   🎯 Role: ${role}`);
+        console.log(`   🏥 Department: ${department}`);
+        console.log(`   📧 Email: ${email}`);
         
+        // Show ABE attributes that will be assigned
+        console.log('\n🔑 ABE Attributes sẽ được gán:');
+        console.log(`   - ROLE:${role}`);
+        console.log(`   - DEPT:${department}`);
+        
+        // Show access examples
+        console.log('\n💡 Ví dụ về quyền truy cập:');
+        if (role === 'ADMIN') {
+            console.log('   ✅ Có thể truy cập TẤT CẢ dữ liệu bệnh nhân');
+        } else {
+            console.log(`   ✅ Có thể truy cập dữ liệu với policy: "ROLE:${role}"`);
+            console.log(`   ✅ Có thể truy cập dữ liệu với policy: "ROLE:${role} and DEPT:${department}"`);
+            console.log(`   ❌ KHÔNG thể truy cập dữ liệu với policy chỉ dành cho ADMIN`);
+        }
+        
+        console.log('\n⚠️  Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu!');
+
     } catch (error) {
-        console.error('Lỗi khi tạo tài khoản admin:', error);
+        console.error('❌ Lỗi:', error.message);
     } finally {
-        // Đóng kết nối
-        setTimeout(() => {
-            mongoose.connection.close();
-            console.log('Kết nối database đã đóng.');
-            process.exit(0);
-        }, 1000);
+        mongoose.connection.close();
+        rl.close();
+        process.exit(0);
     }
 };
 
-// Hàm chính để kết nối và tạo admin
-const main = async () => {
-    try {
-        // Chờ kết nối thành công
-        await connectWithRetry();
-        
-        // Sau khi kết nối thành công, chạy hàm tạo admin
-        await createAdmin();
-    } catch (error) {
-        console.error('Lỗi không xác định:', error);
-        process.exit(1);
-    }
-};
-
-// Chạy hàm chính
-main();
+// Run the user creation process
+createUser();

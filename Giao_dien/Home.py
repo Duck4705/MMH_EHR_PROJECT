@@ -12,20 +12,371 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import requests
 import base64
 import hashlib
+import json
+import sys
+import os
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
+# Add ABE module path
+abe_module_path = os.path.join(os.path.dirname(__file__), '..', 'AttributeAuthority')
+if abe_module_path not in sys.path:
+    sys.path.append(abe_module_path)
+
+try:
+    from ABE_Module import ABECore
+    abe_available = True
+    print("ABE module loaded successfully")
+except ImportError as e:
+    print(f"Warning: ABE module not available: {e}")
+    abe_available = False
+
+# Enhanced ABE client that works with both AA server and EHR server
+class EnhancedABEClient:
+    def __init__(self):
+        self.aa_server_url = "http://localhost:5001"
+        self.ehr_server_url = "http://localhost:5000"
+        self.token = None
+        self.user_info = None
+        self.abe_core = None
+        
+        if abe_available:
+            try:
+                self.abe_core = ABECore()
+                print("ABE Core initialized")
+            except Exception as e:
+                print(f"ABE Core init error: {e}")
+    
+    def set_auth_token(self, token, user_info):
+        """Set authentication token and user info"""
+        self.token = token
+        self.user_info = user_info
+        print(f"ABE Client: Token set for user {user_info.get('username', 'unknown')}")
+    
+    def get_headers(self):
+        """Get headers with authentication token"""
+        if self.token:
+            return {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.token}"
+            }
+        return {"Content-Type": "application/json"}
+    
+    def register_current_user_with_aa(self):
+        """Register current user with AA server via EHR server"""
+        try:
+            if not self.token or not self.user_info:
+                return False, "Missing authentication token or user info"
+            
+            print(f"🔧 Registering user with AA server...")
+            
+            response = requests.post(
+                f"{self.ehr_server_url}/api/abe/register-current-user",
+                headers=self.get_headers(),
+                timeout=30
+            )
+            
+            print(f"📡 AA registration response: {response.status_code}")
+            print(f"📡 Response: {response.text}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ User registered with attributes: {result.get('attributes', [])}")
+                return True, result
+            else:
+                error_msg = response.json().get("message", f"HTTP {response.status_code}")
+                return False, error_msg
+                
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    def encrypt_aes_key_for_patient(self, aes_key, access_policy):
+        """Encrypt AES key with access policy for patient data"""
+        try:
+            data = {
+                "aes_key": aes_key,
+                "policy": access_policy
+            }
+            
+            print(f"🔐 Encrypting AES key with policy: {access_policy}")
+            
+            response = requests.post(
+                f"{self.ehr_server_url}/api/abe/encrypt-aes-key",
+                json=data,
+                headers=self.get_headers(),
+                timeout=30
+            )
+            
+            print(f"📡 EHR server response: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                return True, result.get("encrypted_key")
+            else:
+                error_msg = response.json().get("message", f"HTTP {response.status_code}")
+                return False, error_msg
+                
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    def decrypt_aes_key_for_patient(self, encrypted_aes_key, user_id):
+        """Decrypt AES key for patient data access"""
+        try:
+            data = {
+                "encrypted_key": encrypted_aes_key,
+                "user_id": user_id
+            }
+            
+            print(f"🔓 Decrypting AES key for user: {user_id}")
+            
+            response = requests.post(
+                f"{self.ehr_server_url}/api/abe/decrypt-aes-key",
+                json=data,
+                headers=self.get_headers(),
+                timeout=30
+            )
+            
+            print(f"📡 Decrypt response: {response.status_code}")
+            print(f"📡 Response: {response.text}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                return True, result.get("decrypted_key")
+            else:
+                error_msg = response.json().get("message", f"HTTP {response.status_code}")
+                return False, error_msg
+                
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+    
+    def decrypt_patient_data(self, patient_data):
+        """Decrypt patient data for viewing"""
+        try:
+            if not self.token or not self.user_info:
+                return False, "Missing authentication token or user info"
+            
+            user_id = self.user_info.get('user_id') or self.user_info.get('id')
+            encrypted_aes_key = patient_data.get('encrypted_aes_key')
+            
+            if not encrypted_aes_key:
+                return False, "No encrypted AES key found"
+            
+            print(f"🔓 Attempting to decrypt AES key for user: {user_id}")
+            
+            # Decrypt the AES key using ABE
+            success, aes_key = self.decrypt_aes_key_for_patient(encrypted_aes_key, user_id)
+            
+            if not success:
+                return False, f"Failed to decrypt AES key: {aes_key}"
+            
+            if aes_key:
+                # Now decrypt the patient data fields
+                decrypted_data = self.decrypt_patient_fields(patient_data, aes_key)
+                return True, decrypted_data
+            else:
+                return False, "Failed to get decrypted AES key"
+                
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+
+    def decrypt_patient_fields(self, patient_data, aes_key):
+        """Decrypt individual patient data fields"""
+        try:
+            decrypted_data = patient_data.copy()
+            
+            # List of encrypted fields
+            encrypted_fields = [
+                'NgaySinh', 'DiaChi', 'ThongTinLienLac', 'TienSuBenh',
+                'Tuoi', 'CanNang', 'ChieuCao', 'NhomMau', 'DonThuoc',
+                'DiUng', 'ChiTietBenh', 'GioiTinh'
+            ]
+            
+            for field in encrypted_fields:
+                if field in patient_data and patient_data[field]:
+                    try:
+                        # Decrypt field using the helper method
+                        encrypted_value = patient_data[field]
+                        decrypted_value = self.aes_decrypt(encrypted_value, aes_key)
+                        decrypted_data[field] = decrypted_value
+                    except Exception as field_error:
+                        print(f"❌ Error decrypting field {field}: {field_error}")
+                        decrypted_data[field] = f"[Lỗi giải mã: {field}]"
+            
+            return decrypted_data
+            
+        except Exception as e:
+            print(f"❌ Error in decrypt_patient_fields: {e}")
+            return patient_data
+
+    def aes_decrypt(self, encrypted_text, key):
+        """Decrypt AES encrypted text using AES-256-GCM (matching AddPatient.py encryption)"""
+        try:
+            # Handle mock key for testing
+            if key == 'bW9ja19kZWNyeXB0ZWRfYWVzX2tleQ==':
+                return f"[MOCK DECRYPTED: {encrypted_text[:50]}...]"
+            
+            # Handle different key formats and ensure correct length
+            if isinstance(key, str):
+                # Remove any whitespace
+                key = key.strip()
+                
+                # If key is hex encoded (most common from server)
+                if len(key) == 64 and all(c in '0123456789abcdefABCDEF' for c in key):
+                    # This is a 64-character hex string = 32 bytes
+                    aes_key = bytes.fromhex(key)
+                    print(f"🔑 Using hex key: {key[:16]}... (length: {len(aes_key)} bytes)")
+                else:
+                    # If key is too long, truncate to 64 hex chars
+                    if len(key) > 64:
+                        hex_key = key[:64]
+                        aes_key = bytes.fromhex(hex_key)
+                        print(f"🔑 Truncated hex key to 32 bytes")
+                    else:
+                        # Hash the key to get consistent 32 bytes
+                        aes_key = hashlib.sha256(key.encode('utf-8')).digest()
+                        print(f"🔑 Hashed key to 32 bytes")
+            else:
+                aes_key = key[:32] if len(key) > 32 else key.ljust(32, b'\x00')
+            
+            print(f"🔑 Final AES key length: {len(aes_key)} bytes")
+            
+            # FIXED: Proper AES-GCM decryption (matching AddPatient.py encryption)
+            try:
+                # Try GCM format: base64(nonce[12] + tag[16] + encrypted_data)
+                combined = base64.b64decode(encrypted_text)
+                
+                # Check if this looks like GCM format (at least 28 bytes for nonce+tag)
+                if len(combined) >= 28:
+                    nonce = combined[:12]  # GCM nonce is 12 bytes
+                    tag = combined[12:28]  # GCM tag is 16 bytes
+                    encrypted_data = combined[28:]
+                    
+                    print(f"🔐 Attempting GCM decryption: nonce={len(nonce)}, tag={len(tag)}, data={len(encrypted_data)}")
+                    
+                    # Decrypt using GCM (this should match AddPatient.py encryption)
+                    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+                    decrypted = cipher.decrypt_and_verify(encrypted_data, tag)
+                    
+                    result = decrypted.decode('utf-8')
+                    print(f"✅ GCM decryption successful: {result[:50]}...")
+                    return result
+                else:
+                    raise Exception("Data too short for GCM format")
+                    
+            except Exception as gcm_error:
+                print(f"❌ GCM decryption failed: {gcm_error}")
+                
+                # Fallback to CBC for legacy data only
+                print("⚠️ Falling back to CBC mode for legacy data...")
+                try:
+                    # Try different CBC formats
+                    if ':' in encrypted_text:
+                        # Format: iv_hex:encrypted_hex
+                        iv_hex, encrypted_hex = encrypted_text.split(':', 1)
+                        iv = bytes.fromhex(iv_hex)
+                        encrypted_data = bytes.fromhex(encrypted_hex)
+                    else:
+                        # Format: base64(iv + encrypted_data)
+                        combined = base64.b64decode(encrypted_text)
+                        if len(combined) < 16:
+                            raise Exception("Data too short for CBC")
+                        iv = combined[:16]
+                        encrypted_data = combined[16:]
+                    
+                    # Create cipher and decrypt
+                    cipher = AES.new(aes_key, AES.MODE_CBC, iv)
+                    decrypted = unpad(cipher.decrypt(encrypted_data), AES.block_size)
+                    
+                    result = decrypted.decode('utf-8')
+                    print(f"✅ CBC fallback successful: {result[:50]}...")
+                    return result
+                    
+                except Exception as cbc_error:
+                    print(f"❌ CBC fallback also failed: {cbc_error}")
+                    print(f"❌ Key: {key[:32] if isinstance(key, str) else 'bytes'}...")
+                    print(f"❌ Encrypted text: {encrypted_text[:100]}...")
+                    return "[Lỗi giải mã - Dữ liệu có thể bị hỏng]"
+            
+        except Exception as e:
+            print(f"❌ General AES decrypt error: {e}")
+            print(f"❌ Key: {key[:32] if isinstance(key, str) else 'bytes'}...")
+            print(f"❌ Encrypted text: {encrypted_text[:100]}...")
+            return "[Lỗi giải mã]"
+
+    def aes_encrypt_gcm(self, plaintext, key):
+        """Encrypt using AES-256-GCM (secure mode)"""
+        try:
+            # Ensure 32-byte key
+            if isinstance(key, str):
+                if len(key) == 64:  # hex string
+                    aes_key = bytes.fromhex(key)
+                else:
+                    aes_key = hashlib.sha256(key.encode('utf-8')).digest()
+            else:
+                aes_key = key[:32] if len(key) > 32 else key.ljust(32, b'\x00')
+            
+            # Generate random nonce (12 bytes for GCM)
+            nonce = secrets.token_bytes(12)
+            
+            # Create cipher and encrypt
+            cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
+            encrypted_data, tag = cipher.encrypt_and_digest(plaintext.encode('utf-8'))
+            
+            # Combine nonce + tag + encrypted_data and encode as base64
+            combined = nonce + tag + encrypted_data
+            return base64.b64encode(combined).decode('utf-8')
+            
+        except Exception as e:
+            print(f"❌ AES-GCM encrypt error: {e}")
+            raise
+
+    def check_user_access(self, policy_expression, user_attributes):
+        """Check if user has access based on policy (simple implementation)"""
+        try:
+            # Simple policy check - for ADMIN users, always allow
+            if 'ROLE:ADMIN' in user_attributes:
+                return True
+            
+            # For other users, check if any of their attributes match the policy
+            for attr in user_attributes:
+                if attr in policy_expression:
+                    return True
+            
+            return False
+        except Exception as e:
+            print(f"Error checking access: {e}")
+            return False
+
+# Global ABE client
+abe_client = EnhancedABEClient()
 
 class Ui_mainWindow(object):
     def __init__(self):
         self.token = None
         self.user_info = None
+        self.user_id = None
+        self.user_role = None
+        self.user_department = None
+        self.user_attributes = []
 
     def setupUi(self, mainWindow):
         mainWindow.setObjectName("mainWindow")
         mainWindow.resize(703, 600)
         self.centralwidget = QtWidgets.QWidget(mainWindow)
         self.centralwidget.setObjectName("centralwidget")
+        
+        # ADD: User info display at the top
+        self.lbUserInfo = QtWidgets.QLabel(self.centralwidget)
+        self.lbUserInfo.setGeometry(QtCore.QRect(10, 10, 470, 25))
+        self.lbUserInfo.setObjectName("lbUserInfo")
+        self.lbUserInfo.setStyleSheet("QLabel { color: blue; font-weight: bold; font-size: 12px; }")
+        
+        # ADD: User attributes display
+        self.lbUserAttributes = QtWidgets.QLabel(self.centralwidget)
+        self.lbUserAttributes.setGeometry(QtCore.QRect(10, 35, 470, 20))
+        self.lbUserAttributes.setObjectName("lbUserAttributes")
+        self.lbUserAttributes.setStyleSheet("QLabel { color: green; font-size: 10px; }")
+        
         self.groupBox = QtWidgets.QGroupBox(self.centralwidget)
         self.groupBox.setGeometry(QtCore.QRect(10, 80, 681, 471))
         self.groupBox.setObjectName("groupBox")
@@ -41,9 +392,9 @@ class Ui_mainWindow(object):
         self.tbHienThiDanhSachBenhNhan = QtWidgets.QTextBrowser(self.groupBox)
         self.tbHienThiDanhSachBenhNhan.setGeometry(QtCore.QRect(50, 190, 301, 261))
         self.tbHienThiDanhSachBenhNhan.setObjectName("tbHienThiDanhSachBenhNhan")
-        self.btLayDanhSachBenhNhan = QtWidgets.QPushButton(self.groupBox)
-        self.btLayDanhSachBenhNhan.setGeometry(QtCore.QRect(380, 190, 241, 25))
-        self.btLayDanhSachBenhNhan.setObjectName("btLayDanhSachBenhNhan")
+        # self.btLayDanhSachBenhNhan = QtWidgets.QPushButton(self.groupBox)
+        # self.btLayDanhSachBenhNhan.setGeometry(QtCore.QRect(380, 190, 241, 25))
+        # self.btLayDanhSachBenhNhan.setObjectName("btLayDanhSachBenhNhan")
         self.label_2 = QtWidgets.QLabel(self.groupBox)
         self.label_2.setGeometry(QtCore.QRect(50, 150, 301, 17))
         self.label_2.setObjectName("label_2")
@@ -65,9 +416,9 @@ class Ui_mainWindow(object):
         self.retranslateUi(mainWindow)
         QtCore.QMetaObject.connectSlotsByName(mainWindow)
         
-        # Kết nối các nút với hàm xử lý tương ứng
+        # Connect buttons
         self.btThemEHR.clicked.connect(self.openAddPatient)
-        self.btLayDanhSachBenhNhan.clicked.connect(self.getPatientsList)
+        # self.btLayDanhSachBenhNhan.clicked.connect(self.getPatientsList)
         self.btXemThongTinBenhNhan.clicked.connect(self.getPatientDetail)
         self.btDangXuat.clicked.connect(self.logout)
 
@@ -77,253 +428,314 @@ class Ui_mainWindow(object):
         self.groupBox.setTitle(_translate("mainWindow", "Tra cứu"))
         self.label.setText(_translate("mainWindow", "Nhập ID bệnh nhân cần tra cứu"))
         self.btXemThongTinBenhNhan.setText(_translate("mainWindow", "Xem thông tin chi tiết bệnh nhân"))
-        self.btLayDanhSachBenhNhan.setText(_translate("mainWindow", "Lấy danh sách bệnh nhân có hồ sơ"))
+        # self.btLayDanhSachBenhNhan.setText(_translate("mainWindow", "Lấy danh sách bệnh nhân có hồ sơ"))
         self.label_2.setText(_translate("mainWindow", "Hiển thị các bệnh nhân có hồ sơ y tế điện tử"))
         self.btDangXuat.setText(_translate("mainWindow", "Đăng Xuất"))
-        self.btThemEHR.setText(_translate("mainWindow", "Thêm EHR "))
-
-
-    def giai_ma_aes(self, du_lieu_ma_hoa, khoa_hex):
-        """
-        Giải mã dữ liệu được mã hóa bằng AES
+        self.btThemEHR.setText(_translate("mainWindow", "Thêm EHR"))
         
-        Args:
-            du_lieu_ma_hoa (str): Dữ liệu đã mã hóa dạng base64
-            khoa_hex (str): Khóa AES dạng chuỗi hex
-            
-        Returns:
-            str: Dữ liệu đã giải mã
-        """
+        # Initialize user info labels (will be updated when user logs in)
+        self.lbUserInfo.setText(_translate("mainWindow", "Chưa đăng nhập"))
+        self.lbUserAttributes.setText(_translate("mainWindow", ""))
+
+    def setUserInfo(self, token, user_info):
+        """Set user information and initialize ABE"""
+        print(f"Home received token: {token[:20] if token else 'None'}...")
+        print(f"Home received user_info: {user_info}")
+        
+        self.token = token
+        self.user_info = user_info
+        self.user_id = user_info.get('user_id') or user_info.get('id')
+        self.user_role = user_info.get('role')
+        self.user_department = user_info.get('department')
+        
+        # Build user attributes for display
+        self.user_attributes = [f"ROLE:{self.user_role}"]
+        if self.user_department:
+            self.user_attributes.append(f"DEPT:{self.user_department}")
+        
+        # UPDATE: Display user info in the UI
+        self.updateUserInfoDisplay()
+        
+        # Set up ABE client
+        abe_client.set_auth_token(token, user_info)
+        
+        # Register user with AA server
+        self.register_with_aa()
+
+    def updateUserInfoDisplay(self):
+        """Update the user info display labels"""
         try:
-            # Kiểm tra dữ liệu đầu vào
-            if not du_lieu_ma_hoa or not isinstance(du_lieu_ma_hoa, str):
-                return "N/A"
+            if self.user_info:
+                username = self.user_info.get('username', 'Unknown')
+                fullname = self.user_info.get('fullName', '')
+                role = self.user_role or 'Unknown'
+                department = self.user_department or 'None'
                 
-            # Chuyển khóa từ hex sang bytes
-            khoa = bytes.fromhex(khoa_hex)
-            
-            # Giải mã Base64
-            du_lieu_ma_hoa_bytes = base64.b64decode(du_lieu_ma_hoa)
-            
-            # Kiểm tra độ dài dữ liệu
-            if len(du_lieu_ma_hoa_bytes) < 16:  # IV là 16 bytes
-                return "<Dữ liệu mã hóa không hợp lệ>"
+                # Format user info text
+                if fullname:
+                    user_text = f"👤 Người dùng: {fullname} (@{username}) - Vai trò: {role}"
+                else:
+                    user_text = f"👤 Người dùng: {username} - Vai trò: {role}"
                 
-            # Tách IV (16 byte đầu tiên)
-            iv = du_lieu_ma_hoa_bytes[:16]
-            du_lieu_ma_hoa_bytes = du_lieu_ma_hoa_bytes[16:]
-            
-            # Giải mã AES
-            cipher = AES.new(khoa, AES.MODE_CBC, iv)
-            du_lieu_giai_ma = unpad(cipher.decrypt(du_lieu_ma_hoa_bytes), AES.block_size)
-            
-            # Chuyển kết quả về chuỗi
-            return du_lieu_giai_ma.decode('utf-8')
-        except ValueError as e:
-            # Lỗi cụ thể khi unpad không thành công
-            return "<Lỗi giải mã: Dữ liệu không đúng định dạng>"
+                if department and department.upper() != 'NONE':
+                    user_text += f" - Khoa: {department}"
+                
+                # Format attributes text
+                attributes_text = f"🔑 Quyền truy cập: {', '.join(self.user_attributes)}"
+                
+                # Update labels
+                self.lbUserInfo.setText(user_text)
+                self.lbUserAttributes.setText(attributes_text)
+                
+                # Set different colors based on role
+                if role == 'ADMIN':
+                    self.lbUserInfo.setStyleSheet("QLabel { color: red; font-weight: bold; font-size: 12px; }")
+                elif role == 'DOCTOR':
+                    self.lbUserInfo.setStyleSheet("QLabel { color: blue; font-weight: bold; font-size: 12px; }")
+                elif role == 'NURSE':
+                    self.lbUserInfo.setStyleSheet("QLabel { color: green; font-weight: bold; font-size: 12px; }")
+                else:
+                    self.lbUserInfo.setStyleSheet("QLabel { color: purple; font-weight: bold; font-size: 12px; }")
+                    
+            else:
+                self.lbUserInfo.setText("Chưa đăng nhập")
+                self.lbUserAttributes.setText("")
+                
         except Exception as e:
-            # Các lỗi khác
-            return f"<Lỗi giải mã: {str(e)}>"
-    
-    def openAddPatient(self):
-        """Mở trang thêm bệnh nhân mới"""
+            print(f"Error updating user info display: {e}")
+            self.lbUserInfo.setText("Lỗi hiển thị thông tin người dùng")
+            self.lbUserAttributes.setText("")
+
+    def register_with_aa(self):
+        """Register current user with AA server"""
         try:
-            # Import trang AddPatient
-            from AddPatient import Ui_MainWindow
+            print("🔧 Registering user with AA server...")
+            success, result = abe_client.register_current_user_with_aa()
             
-            # Lưu lại MainWindow hiện tại để đóng sau khi mở AddPatient
-            self.add_patient_window = QtWidgets.QMainWindow()
-            self.add_patient_ui = Ui_MainWindow()
-            self.add_patient_ui.setupUi(self.add_patient_window)
+            if success:
+                print(f"✅ User registered with AA server: {result}")
+            else:
+                print(f"⚠️ AA registration warning: {result}")
+                
+        except Exception as e:
+            print(f"❌ Error registering with AA: {e}")
+
+    def getPatientDetail(self):
+        """Get and decrypt patient details"""
+        try:
+            patient_id = self.tbIDBenhNhan.text().strip()
             
-            # Truyền token cho trang AddPatient
-            if hasattr(self, 'token'):
-                self.add_patient_ui.setToken(self.token)
+            if not patient_id:
+                QtWidgets.QMessageBox.warning(
+                    None, 
+                    "Lỗi", 
+                    "Vui lòng nhập ID bệnh nhân!"
+                )
+                return
             
-            # Lưu cửa sổ cha để quay lại sau khi hoàn thành
-            main_window = self.centralwidget.window()
-            self.add_patient_ui.setParentWindow(main_window)
+            print(f"🔍 Getting patient details for ID: {patient_id}")
             
-            # Hiển thị trang AddPatient
-            self.add_patient_window.show()
+            # Get encrypted patient data from server
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
             
-            # Ẩn cửa sổ Home
-            main_window.hide()
+            response = requests.get(
+                f"http://localhost:5000/api/patients/{patient_id}",
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                patient_data = result.get('patient', result)  # Handle both response formats
+                
+                # Attempt to decrypt the patient data
+                print(f"🔓 Attempting to decrypt patient data...")
+                success, decrypted_data = abe_client.decrypt_patient_data(patient_data)
+                
+                if success:
+                    # Show decrypted data
+                    self.display_patient_data(decrypted_data, decrypted=True)
+                    print(f"✅ Successfully decrypted patient data!")
+                else:
+                    # Show access denied message
+                    QtWidgets.QMessageBox.warning(
+                        None, 
+                        "Truy cập bị từ chối", 
+                        f"Không thể giải mã dữ liệu bệnh nhân: {decrypted_data}\n\n"
+                        f"Bạn có thể không có quyền truy cập dữ liệu này."
+                    )
+                    
+                    # Still show encrypted data (for debugging)
+                    self.display_patient_data(patient_data, decrypted=False)
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                error_message = error_data.get('message', f'HTTP {response.status_code}')
+                QtWidgets.QMessageBox.warning(
+                    None, 
+                    "Lỗi", 
+                    f"Không thể tải dữ liệu bệnh nhân: {error_message}"
+                )
+                
+        except Exception as e:
+            print(f"❌ Error in getPatientDetail: {e}")
+            QtWidgets.QMessageBox.critical(
+                None, 
+                "Lỗi", 
+                f"Lỗi hệ thống: {str(e)}"
+            )
+
+    def display_patient_data(self, patient_data, decrypted=False):
+        """Display patient data (decrypted or encrypted)"""
+        try:
+            status = "🔓 ĐÃ GIẢI MÃ" if decrypted else "🔒 MÃ HÓA"
+            
+            display_text = f"THÔNG TIN BỆNH NHÂN ({status})\n\n"
+            display_text += f"ID: {patient_data.get('ID_BenhNhan', 'N/A')}\n"
+            display_text += f"Họ tên: {patient_data.get('HoTen', 'N/A')}\n"
+            display_text += f"Ngày sinh: {patient_data.get('NgaySinh', 'N/A')}\n"
+            display_text += f"Giới tính: {patient_data.get('GioiTinh', 'N/A')}\n"
+            display_text += f"Tuổi: {patient_data.get('Tuoi', 'N/A')}\n"
+            display_text += f"Cân nặng: {patient_data.get('CanNang', 'N/A')} kg\n"
+            display_text += f"Chiều cao: {patient_data.get('ChieuCao', 'N/A')} cm\n"
+            display_text += f"Nhóm máu: {patient_data.get('NhomMau', 'N/A')}\n"
+            display_text += f"Địa chỉ: {patient_data.get('DiaChi', 'N/A')}\n"
+            display_text += f"Thông tin liên lạc: {patient_data.get('ThongTinLienLac', 'N/A')}\n"
+            display_text += f"Tiền sử bệnh: {patient_data.get('TienSuBenh', 'N/A')}\n"
+            display_text += f"Dị ứng: {patient_data.get('DiUng', 'N/A')}\n"
+            display_text += f"Chi tiết bệnh: {patient_data.get('ChiTietBenh', 'N/A')}\n"
+            display_text += f"Đơn thuốc: {patient_data.get('DonThuoc', 'N/A')}\n"
+            
+            if decrypted:
+                display_text += f"\n✅ Truy cập thành công với quyền: {', '.join(self.user_attributes)}"
+            else:
+                display_text += f"\n⚠️ CHÚ Ý: Dữ liệu đang được mã hóa. Bạn có thể không có quyền giải mã.\n"
+                display_text += f"Chính sách truy cập: {patient_data.get('access_policy', 'N/A')}\n"
+            
+            # Show in the text browser
+            self.tbHienThiDanhSachBenhNhan.setText(display_text)
             
         except Exception as e:
-            print(f"Lỗi khi mở trang thêm bệnh nhân: {str(e)}")
+            print(f"❌ Error displaying patient data: {e}")
 
     def getPatientsList(self):
-        """Lấy danh sách bệnh nhân từ API"""
+        """Get list of patients"""
         try:
-            if hasattr(self, 'token'):
-                # Gọi API với token xác thực
-                base_url = "http://localhost:5000/api"
-                headers = {"Authorization": f"Bearer {self.token}"}
+            if not hasattr(self, 'token'):
+                self.tbHienThiDanhSachBenhNhan.setText("Lỗi: Chưa đăng nhập!")
+                return
                 
-                response = requests.get(f"{base_url}/patients", headers=headers)
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = requests.get("http://localhost:5000/api/patients", headers=headers)
+            
+            if response.status_code == 200:
+                patients = response.json()
                 
-                if response.status_code == 200:
-                    patients = response.json()
-                    # Hiển thị danh sách bệnh nhân
-                    patient_list_text = "DANH SÁCH BỆNH NHÂN:\n\n"
-                    
-                    if not patients:
-                        patient_list_text += "Không có bệnh nhân nào trong hệ thống."
-                    else:
-                        for i, patient in enumerate(patients, 1):
-                            patient_id = patient.get('ID_BenhNhan', 'N/A')
-                            name = patient.get('HoTen', 'N/A')
-                            gender = patient.get('GioiTinh', 'N/A') 
-                            age = patient.get('Tuoi', 'N/A')
-                            patient_list_text += f"{i}. ID: {patient_id} - Họ tên: {name} - Giới tính: {gender} - Tuổi: {age}\n"
-                    
-                    # Thêm thông báo xác nhận token đã được sử dụng thành công
-                    patient_list_text += f"\n(Đã truy xuất dữ liệu thành công với token!)"
-                    
-                    self.tbHienThiDanhSachBenhNhan.setText(patient_list_text)
+                # Enhanced header with user info
+                username = self.user_info.get('username', 'Unknown')
+                fullname = self.user_info.get('fullName', '')
+                display_name = fullname if fullname else username
+                department = self.user_department if self.user_department else 'None'
+                
+                patient_list_text = f"📋 DANH SÁCH BỆNH NHÂN\n"
+                patient_list_text += f"👤 Người dùng: {display_name} ({self.user_role})\n"
+                if department and department.upper() != 'NONE':
+                    patient_list_text += f"🏥 Khoa: {department}\n"
+                patient_list_text += f"🔑 Quyền: {', '.join(self.user_attributes)}\n"
+                patient_list_text += "=" * 50 + "\n\n"
+                
+                if not patients:
+                    patient_list_text += "Không có bệnh nhân nào trong hệ thống."
                 else:
-                    error_message = response.json().get('message', 'Lỗi không xác định')
-                    self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi lấy danh sách bệnh nhân: {error_message}\nToken không hợp lệ hoặc đã hết hạn.")
+                    accessible_count = 0
+                    for i, patient in enumerate(patients, 1):
+                        patient_id = patient.get('ID_BenhNhan', 'N/A')
+                        name = patient.get('HoTen', 'N/A')
+                        policy = patient.get('access_policy', 'N/A')
+                        
+                        # Check if user can access this patient's detailed data
+                        if self.user_role == 'ADMIN':
+                            # Admin can see all patients
+                            access_status = "🔓 Có quyền truy cập"
+                            accessible_count += 1
+                        else:
+                            # Check access based on patient's policy
+                            can_access = abe_client.check_user_access(policy, self.user_attributes)
+                            if can_access:
+                                access_status = "🔓 Có quyền truy cập"
+                                accessible_count += 1
+                            else:
+                                access_status = "🔒 Không có quyền"
+                        
+                        patient_list_text += f"{i}. ID: {patient_id} - {name}\n"
+                        patient_list_text += f"   📋 Chính sách: {policy}\n"
+                        patient_list_text += f"   🔐 Trạng thái: {access_status}\n\n"
+                    
+                    patient_list_text += "=" * 50 + "\n"
+                    patient_list_text += f"📊 Tổng cộng: {len(patients)} bệnh nhân | Có quyền truy cập: {accessible_count} bệnh nhân"
+                
+                self.tbHienThiDanhSachBenhNhan.setText(patient_list_text)
+                
             else:
-                self.tbHienThiDanhSachBenhNhan.setText("Lỗi xác thực: Không có token. Vui lòng đăng nhập lại để nhận token mới.")
+                error_message = response.json().get('error', 'Lỗi không xác định')
+                self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi: {error_message}")
                 
         except Exception as e:
             self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi lấy danh sách bệnh nhân: {str(e)}")
-    
-    def getPatientDetail(self):
-        """Lấy thông tin chi tiết bệnh nhân từ API"""
+
+    def openAddPatient(self):
+        """Open Add Patient window"""
         try:
-            if hasattr(self, 'token'):
-                # Lấy ID bệnh nhân từ trường nhập liệu
-                patient_id = self.tbIDBenhNhan.text().strip()
+            print(f"Opening AddPatient with token: {self.token[:20] if self.token else 'None'}...")
+            
+            from AddPatient import Ui_MainWindow as AddPatientUI
+            
+            self.add_patient_window = QtWidgets.QMainWindow()
+            self.add_patient_ui = AddPatientUI()
+            self.add_patient_ui.setupUi(self.add_patient_window)
+            
+            if self.token and self.user_info:
+                # Set user info first
+                self.add_patient_ui.setUserInfo(self.token, self.user_info)
                 
-                if not patient_id:
-                    self.tbHienThiDanhSachBenhNhan.setText("Vui lòng nhập ID bệnh nhân!")
-                    return
+                # Set parent window reference for "Quay lai" button
+                current_window = self.centralwidget.window()
+                self.add_patient_ui.setParentWindow(current_window)
                 
-                # Gọi API với token xác thực
-                base_url = "http://localhost:5000/api"
-                headers = {"Authorization": f"Bearer {self.token}"}
-                
-                response = requests.get(f"{base_url}/patients/{patient_id}", headers=headers)
-                
-                if response.status_code == 200:
-                    patient_data = response.json()
-                    
-                    # Lấy khóa AES để giải mã
-                    khoa_aes = patient_data.get('KhoaAES')
-                    
-                    # Giải mã các trường được mã hóa nếu có khóa AES
-                    co_loi_giai_ma = False  # Cờ để kiểm tra lỗi giải mã
-                    
-                    if khoa_aes:
-                        try:
-                            # Giải mã các trường dữ liệu
-                            gioi_tinh = self.giai_ma_aes(patient_data.get('GioiTinh', ''), khoa_aes)
-                            ngay_sinh = self.giai_ma_aes(patient_data.get('NgaySinh', ''), khoa_aes)
-                            tuoi = self.giai_ma_aes(patient_data.get('Tuoi', ''), khoa_aes)
-                            dia_chi = self.giai_ma_aes(patient_data.get('DiaChi', ''), khoa_aes)
-                            thong_tin_lien_lac = self.giai_ma_aes(patient_data.get('ThongTinLienLac', ''), khoa_aes)
-                            can_nang = self.giai_ma_aes(patient_data.get('CanNang', ''), khoa_aes)
-                            chieu_cao = self.giai_ma_aes(patient_data.get('ChieuCao', ''), khoa_aes)
-                            nhom_mau = self.giai_ma_aes(patient_data.get('NhomMau', ''), khoa_aes)
-                            tien_su_benh = self.giai_ma_aes(patient_data.get('TienSuBenh', ''), khoa_aes)
-                            di_ung = self.giai_ma_aes(patient_data.get('DiUng', ''), khoa_aes)
-                            chi_tiet_benh = self.giai_ma_aes(patient_data.get('ChiTietBenh', ''), khoa_aes)
-                            don_thuoc = self.giai_ma_aes(patient_data.get('DonThuoc', ''), khoa_aes)
-                            
-                            # Kiểm tra xem có lỗi giải mã không
-                            for field in [gioi_tinh, ngay_sinh, tuoi, dia_chi, thong_tin_lien_lac, 
-                                         can_nang, chieu_cao, nhom_mau, tien_su_benh, di_ung, 
-                                         chi_tiet_benh, don_thuoc]:
-                                if field and field.startswith("<Lỗi giải mã"):
-                                    co_loi_giai_ma = True
-                                    break
-                        except Exception:
-                            co_loi_giai_ma = True
-                    else:
-                        # Nếu không có khóa, sử dụng giá trị hiện tại (có thể đã được lưu dưới dạng không mã hóa)
-                        gioi_tinh = patient_data.get('GioiTinh', 'N/A')
-                        ngay_sinh = patient_data.get('NgaySinh', 'N/A')
-                        tuoi = patient_data.get('Tuoi', 'N/A')
-                        dia_chi = patient_data.get('DiaChi', 'N/A')
-                        thong_tin_lien_lac = patient_data.get('ThongTinLienLac', 'N/A')
-                        can_nang = patient_data.get('CanNang', 'N/A')
-                        chieu_cao = patient_data.get('ChieuCao', 'N/A')
-                        nhom_mau = patient_data.get('NhomMau', 'N/A')
-                        tien_su_benh = patient_data.get('TienSuBenh', 'N/A')
-                        di_ung = patient_data.get('DiUng', 'N/A')
-                        chi_tiet_benh = patient_data.get('ChiTietBenh', 'N/A')
-                        don_thuoc = patient_data.get('DonThuoc', 'N/A')
-                    
-                    # Hiển thị thông tin chi tiết bệnh nhân theo schema với dữ liệu đã giải mã
-                    patient_detail = f"THÔNG TIN CHI TIẾT BỆNH NHÂN:\n\n"
-                    patient_detail += f"ID bệnh nhân: {patient_data.get('ID_BenhNhan', 'N/A')}\n"
-                    patient_detail += f"Họ tên: {patient_data.get('HoTen', 'N/A')}\n"
-                    patient_detail += f"Giới tính: {gioi_tinh}\n"
-                    patient_detail += f"Ngày sinh: {ngay_sinh}\n"
-                    patient_detail += f"Tuổi: {tuoi}\n"
-                    patient_detail += f"Địa chỉ: {dia_chi}\n"
-                    patient_detail += f"Thông tin liên lạc: {thong_tin_lien_lac}\n"
-                    patient_detail += f"Cân nặng: {can_nang} kg\n"
-                    patient_detail += f"Chiều cao: {chieu_cao} cm\n"
-                    patient_detail += f"Nhóm máu: {nhom_mau}\n"
-                    patient_detail += f"\nTIỀN SỬ Y KHOA:\n"
-                    patient_detail += f"Tiền sử bệnh: {tien_su_benh}\n"
-                    patient_detail += f"Dị ứng: {di_ung}\n"
-                    patient_detail += f"\nCHI TIẾT BỆNH HIỆN TẠI:\n"
-                    patient_detail += f"Chi tiết bệnh: {chi_tiet_benh}\n"
-                    patient_detail += f"Đơn thuốc: {don_thuoc}\n"
-                    patient_detail += f"\nLấy dữ liệu thành công với token xác thực!"
-                    if khoa_aes:
-                        if co_loi_giai_ma:
-                            patient_detail += f"\n(Có lỗi xảy ra khi giải mã dữ liệu. Vui lòng liên hệ quản trị viên.)"
-                        else:
-                            patient_detail += f"\n(Dữ liệu đã được giải mã thành công)"
-                    
-                    self.tbHienThiDanhSachBenhNhan.setText(patient_detail)
-                else:
-                    error_message = response.json().get('message', 'Lỗi không xác định')
-                    self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi lấy thông tin bệnh nhân: {error_message}\nToken không hợp lệ hoặc đã hết hạn.")
+                # Show AddPatient window and hide current
+                self.add_patient_window.show()
+                current_window.hide()
             else:
-                self.tbHienThiDanhSachBenhNhan.setText("Lỗi xác thực: Không có token. Vui lòng đăng nhập lại để nhận token mới.")
+                print("No token or user_info available!")
+                self.tbHienThiDanhSachBenhNhan.setText("Lỗi: Thiếu thông tin đăng nhập!")
                 
         except Exception as e:
-            self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi lấy thông tin bệnh nhân: {str(e)}")
+            print(f"Error opening AddPatient: {str(e)}")
+            self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi mở trang thêm bệnh nhân: {str(e)}")
 
     def logout(self):
-        """Đăng xuất, vô hiệu hóa token và quay lại màn hình đăng nhập"""
+        """Logout and return to login screen"""
         try:
-            # Gửi token hiện tại đến API để đưa vào blacklist (vô hiệu hóa)
             if hasattr(self, 'token') and self.token:
-                base_url = "http://localhost:5000/api"
                 headers = {"Authorization": f"Bearer {self.token}"}
-                
-                # Gọi API đăng xuất để đưa token vào blacklist
-                response = requests.post(f"{base_url}/users/logout", headers=headers)
+                response = requests.post("http://localhost:5000/api/users/logout", headers=headers)
                 
                 if response.status_code == 200:
                     self.tbHienThiDanhSachBenhNhan.setText("Đăng xuất thành công. Token đã bị vô hiệu hóa.")
-                    # Reset token và thông tin người dùng
                     self.token = None
                     self.user_info = None
-                else:
-                    self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi đăng xuất: {response.json().get('message', 'Lỗi không xác định')}")
             
-            # Tìm tham chiếu đến cửa sổ login
             main_window = self.centralwidget.window()
             
-            # Đóng cửa sổ hiện tại và hiển thị cửa sổ đăng nhập
-            # Phải có một tham chiếu tới cửa sổ đăng nhập từ bên ngoài
             if hasattr(main_window, 'parent_login_window'):
                 login_window = main_window.parent_login_window
                 main_window.close()
                 login_window.show()
             else:
-                # Nếu không có tham chiếu, chỉ hiển thị thông báo
                 self.tbHienThiDanhSachBenhNhan.setText("Đã đăng xuất, nhưng không thể quay lại trang đăng nhập. Vui lòng đóng ứng dụng và đăng nhập lại.")
+                
         except Exception as e:
             self.tbHienThiDanhSachBenhNhan.setText(f"Lỗi khi đăng xuất: {str(e)}")
 

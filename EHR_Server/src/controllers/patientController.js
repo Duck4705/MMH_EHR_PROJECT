@@ -1,114 +1,316 @@
 const Patient = require('../models/patientModel');
+const crypto = require('crypto');
+const axios = require('axios');
 
-// Tạo bệnh nhân mới
-exports.createPatient = async (req, res) => {
-    try {
-        console.log('Dữ liệu bệnh nhân mới nhận được:', req.body);
-        console.log('Có trường KhoaAES:', req.body.KhoaAES !== undefined);
-        
-        const newPatient = new Patient(req.body);
-        await newPatient.save();
-        
-        console.log('Bệnh nhân sau khi lưu:', newPatient);
-        res.status(201).json(newPatient);
-    } catch (error) {
-        console.error('Lỗi khi tạo bệnh nhân:', error);
-        res.status(400).json({ message: error.message });
-    }
-};
+class PatientController {
+    
+    async createPatient(req, res) {
+        try {
+            // EMERGENCY DEBUG - Log everything
+            console.log('🚨 EMERGENCY DEBUG - Full request body:');
+            console.log(JSON.stringify(req.body, null, 2));
+            
+            console.log('🚨 EMERGENCY DEBUG - Field analysis:');
+            console.log('   req.body.encrypted_aes_key:', req.body.encrypted_aes_key);
+            console.log('   req.body["encrypted_aes_key"]:', req.body["encrypted_aes_key"]);
+            console.log('   Type of encrypted_aes_key:', typeof req.body.encrypted_aes_key);
+            console.log('   All keys in req.body:', Object.keys(req.body));
+            
+            // Check if the field exists with different casing
+            const allKeys = Object.keys(req.body);
+            const aesKeyFields = allKeys.filter(key => key.toLowerCase().includes('aes') || key.toLowerCase().includes('key'));
+            console.log('   AES/Key related fields found:', aesKeyFields);
+            
+            // Try to find the encrypted_aes_key field with different names
+            const possibleKeyFields = [
+                'encrypted_aes_key',
+                'EncryptedAESKey', 
+                'encryptedAESKey',
+                'encrypted_key',
+                'aes_key'
+            ];
+            
+            let foundKeyField = null;
+            let foundKeyValue = null;
+            
+            for (const fieldName of possibleKeyFields) {
+                if (req.body[fieldName]) {
+                    foundKeyField = fieldName;
+                    foundKeyValue = req.body[fieldName];
+                    console.log(`   ✅ Found key field: ${fieldName} = ${foundKeyValue}`);
+                    break;
+                }
+            }
+            
+            if (!foundKeyField) {
+                console.log('   ❌ No encrypted key field found in any expected format');
+                return res.status(400).json({
+                    message: 'No encrypted AES key field found',
+                    received_fields: Object.keys(req.body),
+                    expected_fields: possibleKeyFields,
+                    debug_body: req.body
+                });
+            }
+            
+            // Use the found key field
+            const encrypted_aes_key = foundKeyValue;
+            
+            // Continue with the rest of your existing createPatient logic...
+            const {
+                ID_BenhNhan,
+                HoTen,
+                NgaySinh,
+                DiaChi,
+                ThongTinLienLac,
+                TienSuBenh,
+                Tuoi,
+                CanNang,
+                ChieuCao,
+                NhomMau,
+                DonThuoc,
+                DiUng,
+                ChiTietBenh,
+                GioiTinh,
+                access_policy
+            } = req.body;
 
-// Lấy danh sách bệnh nhân
-exports.getPatients = async (req, res) => {
-    try {
-        const patients = await Patient.find();
-        res.status(200).json(patients);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
+            console.log('🔑 Using encrypted_aes_key:', encrypted_aes_key);
+            console.log('📋 Access policy:', access_policy);
+            
+            // Validate required fields
+            if (!ID_BenhNhan || !HoTen) {
+                return res.status(400).json({ 
+                    message: 'ID bệnh nhân và họ tên là bắt buộc'
+                });
+            }
 
-// Lấy thông tin bệnh nhân theo ID
-exports.getPatientById = async (req, res) => {
-    try {
-        let patient;
-        
-        // Kiểm tra xem id có phải là MongoDB ObjectID hợp lệ không
-        if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
-            // Nếu là ObjectID hợp lệ, thử tìm theo _id
-            patient = await Patient.findById(req.params.id);
+            if (!access_policy) {
+                return res.status(400).json({ 
+                    message: 'Chính sách truy cập là bắt buộc' 
+                });
+            }
+
+            if (!encrypted_aes_key) {
+                return res.status(400).json({ 
+                    message: 'Encrypted AES key là bắt buộc',
+                    debug_info: {
+                        received_fields: Object.keys(req.body),
+                        found_key_field: foundKeyField,
+                        found_key_value: foundKeyValue,
+                        full_body: req.body
+                    }
+                });
+            }
+
+            // Check if patient already exists
+            const existingPatient = await Patient.findOne({ ID_BenhNhan });
+            if (existingPatient) {
+                return res.status(409).json({ 
+                    message: `Bệnh nhân với ID ${ID_BenhNhan} đã tồn tại` 
+                });
+            }
+
+            // Create patient data
+            const patientData = {
+                ID_BenhNhan,
+                HoTen,
+                NgaySinh: NgaySinh || '',
+                DiaChi: DiaChi || '',
+                ThongTinLienLac: ThongTinLienLac || '',
+                TienSuBenh: TienSuBenh || '',
+                Tuoi: Tuoi || '',
+                CanNang: CanNang || '',
+                ChieuCao: ChieuCao || '',
+                NhomMau: NhomMau || '',
+                DonThuoc: DonThuoc || '',
+                DiUng: DiUng || '',
+                ChiTietBenh: ChiTietBenh || '',
+                GioiTinh: GioiTinh || '',
+                encrypted_aes_key: encrypted_aes_key, // Use the found value
+                access_policy: access_policy,
+                created_by: req.user?.id || req.user?.user_id || 'unknown',
+                department: req.user?.department || 'GENERAL'
+            };
+            
+            console.log('💾 Creating patient with encrypted_aes_key:', patientData.encrypted_aes_key);
+            
+            const patient = new Patient(patientData);
+            await patient.save();
+            
+            console.log('✅ Patient created successfully with ID:', patient.ID_BenhNhan);
+            
+            res.status(201).json({
+                message: 'Tạo bệnh nhân thành công',
+                ID_BenhNhan: patient.ID_BenhNhan,
+                success: true
+            });
+            
+        } catch (error) {
+            console.error('❌ Error creating patient:', error);
+            console.error('❌ Error stack:', error.stack);
+            
+            // Enhanced error details
+            if (error.name === 'ValidationError') {
+                console.error('❌ Validation errors:', error.errors);
+                return res.status(400).json({ 
+                    message: 'Dữ liệu không hợp lệ',
+                    validation_errors: error.errors,
+                    missing_fields: Object.keys(error.errors)
+                });
+            }
+            
+            res.status(500).json({ 
+                message: 'Đã xảy ra lỗi khi tạo bệnh nhân',
+                error: error.message,
+                error_type: error.name
+            });
         }
-        
-        // Nếu không tìm thấy bằng _id hoặc không phải là ObjectID hợp lệ
-        if (!patient) {
-            // Tìm theo ID_BenhNhan
-            patient = await Patient.findOne({ ID_BenhNhan: req.params.id });
-        }
-        
-        if (!patient) return res.status(404).json({ message: 'Patient not found' });
-        
-        console.log('Chi tiết bệnh nhân được tìm thấy:', patient);
-        console.log('Bệnh nhân có trường KhoaAES:', patient.KhoaAES !== undefined);
-        
-        res.status(200).json(patient);
-    } catch (error) {
-        console.error('Lỗi khi tìm bệnh nhân:', error);
-        res.status(500).json({ message: error.message });
     }
-};
-
-// Cập nhật thông tin bệnh nhân
-exports.updatePatient = async (req, res) => {
-    try {
-        console.log('Dữ liệu cập nhật bệnh nhân:', req.body);
-        console.log('Có trường KhoaAES:', req.body.KhoaAES !== undefined);
-        
-        let updatedPatient;
-        
-        // Kiểm tra xem id có phải là MongoDB ObjectID hợp lệ không
-        if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
-            // Nếu là ObjectID hợp lệ, cập nhật theo _id
-            updatedPatient = await Patient.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    
+    async getPatients(req, res) {
+        try {
+            // Return all patients with encrypted data
+            // Client will decrypt what they can access
+            const patients = await Patient.find({}).sort({ created_at: -1 });
+            
+            res.json({
+                message: 'Lấy danh sách bệnh nhân thành công',
+                count: patients.length,
+                patients: patients
+            });
+            
+        } catch (error) {
+            console.error('Error getting patients:', error);
+            res.status(500).json({ 
+                message: 'Lỗi khi lấy danh sách bệnh nhân',
+                error: 'Failed to retrieve patients' 
+            });
         }
-        
-        // Nếu không tìm thấy bằng _id hoặc id không phải là ObjectID hợp lệ
-        if (!updatedPatient) {
-            // Cập nhật theo ID_BenhNhan
-            updatedPatient = await Patient.findOneAndUpdate(
-                { ID_BenhNhan: req.params.id },
-                req.body,
-                { new: true }
+    }
+    
+    async getPatientById(req, res) {
+        try {
+            const patient_id = req.params.id;
+            
+            // Return patient with encrypted data
+            // Client will decrypt if they have access
+            const patient = await Patient.findOne({ ID_BenhNhan: patient_id });
+            
+            if (!patient) {
+                return res.status(404).json({ 
+                    message: 'Không tìm thấy bệnh nhân với ID này' 
+                });
+            }
+            
+            res.json({
+                message: 'Lấy thông tin bệnh nhân thành công',
+                patient: patient
+            });
+            
+        } catch (error) {
+            console.error('Error getting patient:', error);
+            res.status(500).json({ 
+                message: 'Lỗi khi lấy thông tin bệnh nhân',
+                error: 'Failed to retrieve patient' 
+            });
+        }
+    }
+
+    async updatePatient(req, res) {
+        try {
+            const patient_id = req.params.id;
+            const updates = req.body;
+            
+            // Remove fields that shouldn't be updated directly
+            delete updates._id;
+            delete updates.created_at;
+            delete updates.created_by;
+            
+            // Add updated timestamp
+            updates.updated_at = new Date();
+            
+            const patient = await Patient.findOneAndUpdate(
+                { ID_BenhNhan: patient_id },
+                updates,
+                { new: true, runValidators: true }
             );
+            
+            if (!patient) {
+                return res.status(404).json({ 
+                    message: 'Không tìm thấy bệnh nhân với ID này' 
+                });
+            }
+            
+            res.json({
+                message: 'Cập nhật thông tin bệnh nhân thành công',
+                patient: patient
+            });
+            
+        } catch (error) {
+            console.error('Error updating patient:', error);
+            res.status(500).json({ 
+                message: 'Lỗi khi cập nhật thông tin bệnh nhân',
+                error: 'Failed to update patient' 
+            });
         }
-        
-        if (!updatedPatient) return res.status(404).json({ message: 'Patient not found' });
-        console.log('Bệnh nhân sau khi cập nhật:', updatedPatient);
-        res.status(200).json(updatedPatient);
-    } catch (error) {
-        console.error('Lỗi khi cập nhật bệnh nhân:', error);
-        res.status(400).json({ message: error.message });
     }
-};
 
-// Xóa bệnh nhân
-exports.deletePatient = async (req, res) => {
-    try {
-        let deletedPatient;
-        
-        // Kiểm tra xem id có phải là MongoDB ObjectID hợp lệ không
-        if (/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
-            // Nếu là ObjectID hợp lệ, xóa theo _id
-            deletedPatient = await Patient.findByIdAndDelete(req.params.id);
+    async deletePatient(req, res) {
+        try {
+            const patient_id = req.params.id;
+            
+            const patient = await Patient.findOneAndDelete({ ID_BenhNhan: patient_id });
+            
+            if (!patient) {
+                return res.status(404).json({ 
+                    message: 'Không tìm thấy bệnh nhân với ID này' 
+                });
+            }
+            
+            res.json({
+                message: 'Xóa bệnh nhân thành công',
+                deleted_patient: {
+                    ID_BenhNhan: patient.ID_BenhNhan,
+                    HoTen: patient.HoTen
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error deleting patient:', error);
+            res.status(500).json({ 
+                message: 'Lỗi khi xóa bệnh nhân',
+                error: 'Failed to delete patient' 
+            });
         }
-        
-        // Nếu không tìm thấy bằng _id hoặc id không phải là ObjectID hợp lệ
-        if (!deletedPatient) {
-            // Tìm và xóa theo ID_BenhNhan
-            deletedPatient = await Patient.findOneAndDelete({ ID_BenhNhan: req.params.id });
-        }
-        
-        if (!deletedPatient) return res.status(404).json({ message: 'Patient not found' });
-        res.status(200).json({ message: 'Patient deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
     }
-};
+    
+    // Keep your existing helper methods if needed elsewhere
+    encryptPatientData(patient_data, aes_key) {
+        const sensitive_fields = [
+            'NgaySinh', 'DiaChi', 'ThongTinLienLac', 'TienSuBenh',
+            'Tuoi', 'CanNang', 'ChieuCao', 'NhomMau', 'DonThuoc',
+            'DiUng', 'ChiTietBenh', 'GioiTinh'
+        ];
+        
+        const encrypted_data = { ...patient_data };
+        
+        sensitive_fields.forEach(field => {
+            if (patient_data[field]) {
+                encrypted_data[field] = this.aesEncrypt(patient_data[field], aes_key);
+            }
+        });
+        
+        return encrypted_data;
+    }
+    
+    aesEncrypt(text, key) {
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipher('aes-256-cbc', key);
+        let encrypted = cipher.update(text, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
+        return iv.toString('hex') + ':' + encrypted;
+    }
+}
+
+// Keep your existing export pattern - it's correct!
+module.exports = new PatientController();
